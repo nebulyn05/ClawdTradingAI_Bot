@@ -23,10 +23,10 @@ describe("signer", () => {
     expect(wallet.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
-  it("throws for unsupported chains (monad/robinhood stubs)", async () => {
+  it("creates Monad and Robinhood Chain wallets (EVM-family, same as ethereum/bsc/base)", async () => {
     const { createWallet } = await import("./signer.js");
-    expect(() => createWallet("monad")).toThrow(/not implemented/);
-    expect(() => createWallet("robinhood")).toThrow(/not implemented/);
+    expect(createWallet("monad").address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(createWallet("robinhood").address).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
   it("round-trips create -> withDecryptedKey", async () => {

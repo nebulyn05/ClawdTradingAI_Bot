@@ -3,6 +3,16 @@ import type { Chain, NetworkMode } from "./types.js";
 
 const networkSchema = z.enum(["testnet", "mainnet"]).default("testnet");
 
+// z.coerce.boolean() coerces ANY non-empty string (including the literal
+// text "false") to `true` — not what an env var flag needs. This parses the
+// actual text instead.
+const boolFromString = (defaultValue: boolean) =>
+  z
+    .string()
+    .optional()
+    .default(String(defaultValue))
+    .transform((v) => v === "true" || v === "1");
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.string().default("info"),
@@ -43,6 +53,65 @@ const envSchema = z.object({
   BSC_MAINNET_RPC_URL: z.string().optional().default(""),
   BASE_TESTNET_RPC_URL: z.string().default("https://base-sepolia-rpc.publicnode.com"),
   BASE_MAINNET_RPC_URL: z.string().optional().default(""),
+
+  // Websocket RPC overrides for Sniper/Scout's live subscriptions (PairCreated,
+  // Transfer logs, blocks). If unset, derived automatically from the http(s)
+  // RPC URL by swapping the scheme to wss:// — works for Alchemy/QuickNode,
+  // override here if your provider needs a different websocket endpoint.
+  ETHEREUM_MAINNET_WS_URL: z.string().optional().default(""),
+  ETHEREUM_TESTNET_WS_URL: z.string().optional().default(""),
+  BSC_MAINNET_WS_URL: z.string().optional().default(""),
+  BSC_TESTNET_WS_URL: z.string().optional().default(""),
+  BASE_MAINNET_WS_URL: z.string().optional().default(""),
+  BASE_TESTNET_WS_URL: z.string().optional().default(""),
+  MONAD_MAINNET_WS_URL: z.string().optional().default(""),
+  MONAD_TESTNET_WS_URL: z.string().optional().default(""),
+  ROBINHOOD_MAINNET_WS_URL: z.string().optional().default(""),
+  ROBINHOOD_TESTNET_WS_URL: z.string().optional().default(""),
+
+  // Monad (chain 143 mainnet / 10143 testnet) and Robinhood Chain (4663
+  // mainnet / 46630 testnet) — both EVM-compatible, handled by the same EVM
+  // adapter family as Ethereum/BSC/Base.
+  MONAD_MAINNET_RPC_URL: z.string().default("https://rpc.monad.xyz"),
+  // No default — Monad's testnet RPC is known to get reset/migrated; set this
+  // from https://docs.monad.xyz right before use.
+  MONAD_TESTNET_RPC_URL: z.string().optional().default(""),
+  ROBINHOOD_MAINNET_RPC_URL: z.string().default("https://rpc.mainnet.chain.robinhood.com"),
+  ROBINHOOD_TESTNET_RPC_URL: z.string().default("https://rpc.testnet.chain.robinhood.com"),
+
+  // Neither chain has a known public Uniswap-V2-style DEX deployment wired in
+  // here yet — set these once you've confirmed one exists (Robinhood Chain in
+  // particular is built for tokenized stocks/RWAs, not permissionless meme
+  // trading, and may not have one at all).
+  MONAD_FACTORY_ADDRESS: z.string().optional().default(""),
+  MONAD_ROUTER_ADDRESS: z.string().optional().default(""),
+  MONAD_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_FACTORY_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_ROUTER_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+
+  // Flashbots Protect (Ethereum mainnet only): submits transactions through
+  // Flashbots' RPC for frontrunning/revert protection instead of the public
+  // mempool. Opt-in since it only makes sense on mainnet with real MEV risk.
+  FLASHBOTS_ENABLED: boolFromString(false),
+  FLASHBOTS_RPC_URL: z.string().default("https://rpc.flashbots.net"),
+
+  // Jito (Solana mainnet only): bundles the swap with a tip transaction and
+  // submits via Jito's Block Engine for MEV-protected/priority inclusion.
+  // Opt-in for the same reason as Flashbots.
+  JITO_ENABLED: boolFromString(false),
+  JITO_BLOCK_ENGINE_URL: z
+    .string()
+    .default("https://mainnet.block-engine.jito.wtf/api/v1/bundles"),
+  JITO_TIP_LAMPORTS: z.coerce.number().int().min(0).default(10_000),
+  // Comma-separated Jito tip account pubkeys — verify against
+  // https://docs.jito.wtf before relying on this with real size, tip accounts
+  // do get rotated.
+  JITO_TIP_ACCOUNTS: z
+    .string()
+    .default(
+      "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5,HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+    ),
 
   // Optional overrides for the Uniswap-V2-style factory/router/wrapped-native
   // Sniper and Router use. Mainnet has working defaults (see evm/config.ts);

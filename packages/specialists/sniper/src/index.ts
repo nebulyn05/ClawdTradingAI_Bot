@@ -3,7 +3,7 @@ import { getChainAdapter, type Unsubscribe } from "@clawd/chains";
 
 const log = createLogger("sniper");
 
-const DEFAULT_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base"];
+const DEFAULT_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base", "monad", "robinhood"];
 
 /**
  * Subscribes to new-launch/new-pair events on every enabled chain and

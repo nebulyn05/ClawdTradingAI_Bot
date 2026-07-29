@@ -2,7 +2,6 @@ import type { Chain } from "@clawd/core";
 import type { ChainAdapter } from "./types.js";
 import { createSolanaAdapter } from "./solana/adapter.js";
 import { createEvmAdapter } from "./evm/adapter.js";
-import { createStubAdapter } from "./stub.js";
 
 let registry: Partial<Record<Chain, ChainAdapter>> | undefined;
 
@@ -12,8 +11,8 @@ function buildRegistry(): Record<Chain, ChainAdapter> {
     ethereum: createEvmAdapter("ethereum"),
     bsc: createEvmAdapter("bsc"),
     base: createEvmAdapter("base"),
-    monad: createStubAdapter("monad"),
-    robinhood: createStubAdapter("robinhood"),
+    monad: createEvmAdapter("monad"),
+    robinhood: createEvmAdapter("robinhood"),
   };
 }
 

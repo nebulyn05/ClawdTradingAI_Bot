@@ -4,7 +4,7 @@ import { getChainAdapter, type Unsubscribe } from "@clawd/chains";
 
 const log = createLogger("scout");
 
-const DEFAULT_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base"];
+const DEFAULT_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base", "monad", "robinhood"];
 
 /** Adds an address to the smart-money watchlist Scout draws from. */
 export async function addWatchlistEntry(chain: Chain, address: string, label?: string) {

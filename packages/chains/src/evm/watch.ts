@@ -1,11 +1,32 @@
-import { createPublicClient, http, type Log } from "viem";
+import { createPublicClient, http, webSocket, type Log } from "viem";
 import type { NewPairEvent, WalletActivity } from "@clawd/core";
 import { createLogger } from "@clawd/core";
-import { evmConfig, type EvmChain } from "./config.js";
+import { evmConfig, type EvmChain, type EvmChainConfig } from "./config.js";
 import { FACTORY_V2_ABI, ERC20_ABI, NATIVE_TOKEN_ADDRESS } from "./abis.js";
 import type { Unsubscribe } from "../types.js";
 
 const log = createLogger("chains:evm:watch");
+
+const DEX_LABELS: Record<EvmChain, string> = {
+  ethereum: "uniswap-v2",
+  bsc: "pancakeswap-v2",
+  base: "v2-fork",
+  monad: "v2-fork",
+  robinhood: "v2-fork",
+};
+
+/**
+ * Live subscriptions (new pairs, wallet activity) use a websocket transport
+ * when one's configured — real push notifications instead of the http
+ * polling viem falls back to. One-off calls (quotes, balances, sends) stay
+ * on http in the other EVM modules since a persistent socket doesn't help there.
+ */
+function watchClient(cfg: EvmChainConfig) {
+  return createPublicClient({
+    chain: cfg.viemChain,
+    transport: cfg.wsUrl ? webSocket(cfg.wsUrl) : http(cfg.rpcUrl),
+  });
+}
 
 /** Watches a Uniswap-V2-style factory for new pairs against the chain's wrapped native token. */
 export function watchEvmNewPairs(chain: EvmChain, onEvent: (pair: NewPairEvent) => void): Unsubscribe {
@@ -13,7 +34,7 @@ export function watchEvmNewPairs(chain: EvmChain, onEvent: (pair: NewPairEvent) 
   if (!cfg.factoryAddress || !cfg.wrappedNativeAddress) {
     throw new Error(`No V2 factory configured for ${chain} — Sniper is disabled for this chain/network.`);
   }
-  const client = createPublicClient({ chain: cfg.viemChain, transport: http(cfg.rpcUrl) });
+  const client = watchClient(cfg);
   const wrapped = cfg.wrappedNativeAddress.toLowerCase();
 
   return client.watchContractEvent({
@@ -33,7 +54,7 @@ export function watchEvmNewPairs(chain: EvmChain, onEvent: (pair: NewPairEvent) 
           chain,
           tokenAddress,
           pairAddress: args.pair,
-          dex: chain === "bsc" ? "pancakeswap-v2" : "uniswap-v2",
+          dex: DEX_LABELS[chain],
           detectedAt: Date.now(),
         });
       }
@@ -49,7 +70,7 @@ export function watchEvmWallet(
   onEvent: (activity: WalletActivity) => void,
 ): Unsubscribe {
   const cfg = evmConfig(chain);
-  const client = createPublicClient({ chain: cfg.viemChain, transport: http(cfg.rpcUrl) });
+  const client = watchClient(cfg);
   const watched = address as `0x${string}`;
 
   const toTokenActivity = (side: "buy" | "sell") => (logs: Log[]) => {

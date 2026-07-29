@@ -23,14 +23,23 @@ export interface SolanaTokenSecurity {
   top10_holder_rate?: string;
 }
 
-/** EVM chain IDs GoPlus expects (mainnet only — GoPlus has little/no testnet coverage). */
-export const GOPLUS_EVM_CHAIN_IDS = { ethereum: 1, bsc: 56, base: 8453 } as const;
+/**
+ * EVM chain IDs GoPlus expects. Mainnet only (little/no testnet coverage),
+ * and only for chains GoPlus actually indexes — Monad and Robinhood Chain
+ * are too new/niche to have an entry, so they're absent rather than guessed.
+ */
+export const GOPLUS_EVM_CHAIN_IDS: Partial<Record<"ethereum" | "bsc" | "base" | "monad" | "robinhood", number>> = {
+  ethereum: 1,
+  bsc: 56,
+  base: 8453,
+};
 
 /** Free, keyless token-security lookup (GoPlus Security API) for EVM chains. Null if unavailable. */
 export async function getEvmTokenSecurity(
-  chainId: number,
+  chainId: number | undefined,
   tokenAddress: string,
 ): Promise<EvmTokenSecurity | null> {
+  if (chainId === undefined) return null;
   try {
     const url = `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${tokenAddress}`;
     const res = await fetch(url);

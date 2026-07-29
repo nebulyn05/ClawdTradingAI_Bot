@@ -11,8 +11,8 @@ import { getChainAdapter, formatNativeAmount, parseNativeAmount } from "@clawd/c
 
 export { formatNativeAmount, parseNativeAmount };
 
-/** Chains with a real, working adapter. Monad/Robinhood are excluded from auto-provisioning. */
-export const SUPPORTED_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base"];
+/** All 6 chains now have real, working adapters. */
+export const SUPPORTED_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base", "monad", "robinhood"];
 
 function toEncryptedKey(wallet: Wallet): EncryptedKey {
   return {

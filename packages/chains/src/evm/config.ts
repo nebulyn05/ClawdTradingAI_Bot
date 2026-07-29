@@ -1,11 +1,25 @@
-import { mainnet, sepolia, bsc, bscTestnet, base, baseSepolia, type Chain as ViemChain } from "viem/chains";
+import {
+  mainnet,
+  sepolia,
+  bsc,
+  bscTestnet,
+  base,
+  baseSepolia,
+  monad,
+  monadTestnet,
+  robinhood,
+  robinhoodTestnet,
+  type Chain as ViemChain,
+} from "viem/chains";
 import { loadConfig, networkForChain, type Chain } from "@clawd/core";
 
-export type EvmChain = "ethereum" | "bsc" | "base";
+export type EvmChain = "ethereum" | "bsc" | "base" | "monad" | "robinhood";
 
 interface EvmChainConfig {
   viemChain: ViemChain;
   rpcUrl: string;
+  /** Websocket RPC for live subscriptions (PairCreated/Transfer logs, blocks). */
+  wsUrl: string;
   /** Uniswap-V2-style factory (emits PairCreated) used by Sniper to detect new pools. */
   factoryAddress: `0x${string}` | undefined;
   /** Uniswap-V2-style router used to price and execute swaps. */
@@ -16,7 +30,10 @@ interface EvmChainConfig {
 // Canonical mainnet deployments. Testnets have no default — most public
 // testnets don't have a single "official" V2 fork — so those fall back to
 // the *_FACTORY_ADDRESS / *_ROUTER_ADDRESS / *_WRAPPED_NATIVE_ADDRESS env
-// vars, which override the mainnet defaults too if set.
+// vars, which override the mainnet defaults too if set. Monad and Robinhood
+// Chain have no known public V2-fork deployment wired in at all yet —
+// Robinhood Chain in particular is built for tokenized stocks/RWAs, not
+// permissionless meme trading, and may not have one.
 const UNISWAP_V2_MAINNET = {
   factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" as const,
   router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" as const,
@@ -37,19 +54,31 @@ function resolved(envValue: string, mainnetDefault: string | undefined, network:
   return undefined;
 }
 
+/** Derives a wss:// URL from an http(s) one (works for Alchemy/QuickNode) unless overridden. */
+function wsFor(override: string, httpUrl: string): string {
+  if (override) return override;
+  if (!httpUrl) return "";
+  return httpUrl.replace(/^http/, "ws");
+}
+
 function evmConfig(chain: EvmChain): EvmChainConfig {
   const cfg = loadConfig();
   const network = networkForChain(chain);
 
   switch (chain) {
-    case "ethereum":
+    case "ethereum": {
+      const rpcUrl =
+        network === "mainnet"
+          ? cfg.ETHEREUM_MAINNET_RPC_URL ||
+            (cfg.ALCHEMY_API_KEY ? `https://eth-mainnet.g.alchemy.com/v2/${cfg.ALCHEMY_API_KEY}` : "")
+          : cfg.ETHEREUM_TESTNET_RPC_URL;
       return {
         viemChain: network === "mainnet" ? mainnet : sepolia,
-        rpcUrl:
-          network === "mainnet"
-            ? cfg.ETHEREUM_MAINNET_RPC_URL ||
-              (cfg.ALCHEMY_API_KEY ? `https://eth-mainnet.g.alchemy.com/v2/${cfg.ALCHEMY_API_KEY}` : "")
-            : cfg.ETHEREUM_TESTNET_RPC_URL,
+        rpcUrl,
+        wsUrl: wsFor(
+          network === "mainnet" ? cfg.ETHEREUM_MAINNET_WS_URL : cfg.ETHEREUM_TESTNET_WS_URL,
+          rpcUrl,
+        ),
         factoryAddress: resolved(cfg.ETHEREUM_FACTORY_ADDRESS, UNISWAP_V2_MAINNET.factory, network),
         routerAddress: resolved(cfg.ETHEREUM_ROUTER_ADDRESS, UNISWAP_V2_MAINNET.router, network),
         wrappedNativeAddress: resolved(
@@ -58,10 +87,13 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
           network,
         ),
       };
-    case "bsc":
+    }
+    case "bsc": {
+      const rpcUrl = network === "mainnet" ? cfg.QUICKNODE_BSC_URL : cfg.BSC_TESTNET_RPC_URL;
       return {
         viemChain: network === "mainnet" ? bsc : bscTestnet,
-        rpcUrl: network === "mainnet" ? cfg.QUICKNODE_BSC_URL : cfg.BSC_TESTNET_RPC_URL,
+        rpcUrl,
+        wsUrl: wsFor(network === "mainnet" ? cfg.BSC_MAINNET_WS_URL : cfg.BSC_TESTNET_WS_URL, rpcUrl),
         factoryAddress: resolved(cfg.BSC_FACTORY_ADDRESS, PANCAKESWAP_V2_MAINNET.factory, network),
         routerAddress: resolved(cfg.BSC_ROUTER_ADDRESS, PANCAKESWAP_V2_MAINNET.router, network),
         wrappedNativeAddress: resolved(
@@ -70,22 +102,69 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
           network,
         ),
       };
-    case "base":
+    }
+    case "base": {
+      const rpcUrl = network === "mainnet" ? cfg.QUICKNODE_BASE_URL : cfg.BASE_TESTNET_RPC_URL;
       return {
         viemChain: network === "mainnet" ? base : baseSepolia,
-        rpcUrl: network === "mainnet" ? cfg.QUICKNODE_BASE_URL : cfg.BASE_TESTNET_RPC_URL,
-        // No canonical Uniswap-V2-style deployment shipped for Base on either
-        // network — set BASE_FACTORY_ADDRESS / BASE_ROUTER_ADDRESS /
-        // BASE_WRAPPED_NATIVE_ADDRESS once you've picked a V2-fork DEX (e.g. BaseSwap).
+        rpcUrl,
+        wsUrl: wsFor(network === "mainnet" ? cfg.BASE_MAINNET_WS_URL : cfg.BASE_TESTNET_WS_URL, rpcUrl),
         factoryAddress: resolved(cfg.BASE_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.BASE_ROUTER_ADDRESS, undefined, network),
         wrappedNativeAddress: resolved(cfg.BASE_WRAPPED_NATIVE_ADDRESS, undefined, network),
       };
+    }
+    case "monad": {
+      // viem's built-in `monad`/`monadTestnet` definitions already carry the
+      // correct chain ID (143 / 10143) and RPC URLs — used directly rather
+      // than re-declaring them.
+      const viemChain = network === "mainnet" ? monad : monadTestnet;
+      const rpcUrl =
+        (network === "mainnet" ? cfg.MONAD_MAINNET_RPC_URL : cfg.MONAD_TESTNET_RPC_URL) ||
+        viemChain.rpcUrls.default.http[0] ||
+        "";
+      return {
+        viemChain,
+        rpcUrl,
+        wsUrl: wsFor(
+          network === "mainnet" ? cfg.MONAD_MAINNET_WS_URL : cfg.MONAD_TESTNET_WS_URL,
+          rpcUrl,
+        ),
+        factoryAddress: resolved(cfg.MONAD_FACTORY_ADDRESS, undefined, network),
+        routerAddress: resolved(cfg.MONAD_ROUTER_ADDRESS, undefined, network),
+        wrappedNativeAddress: resolved(cfg.MONAD_WRAPPED_NATIVE_ADDRESS, undefined, network),
+      };
+    }
+    case "robinhood": {
+      const viemChain = network === "mainnet" ? robinhood : robinhoodTestnet;
+      const rpcUrl =
+        (network === "mainnet" ? cfg.ROBINHOOD_MAINNET_RPC_URL : cfg.ROBINHOOD_TESTNET_RPC_URL) ||
+        viemChain.rpcUrls.default.http[0] ||
+        "";
+      return {
+        viemChain,
+        rpcUrl,
+        wsUrl: wsFor(
+          network === "mainnet" ? cfg.ROBINHOOD_MAINNET_WS_URL : cfg.ROBINHOOD_TESTNET_WS_URL,
+          rpcUrl,
+        ),
+        // No known public AMM factory on Robinhood Chain — see module comment.
+        factoryAddress: resolved(cfg.ROBINHOOD_FACTORY_ADDRESS, undefined, network),
+        routerAddress: resolved(cfg.ROBINHOOD_ROUTER_ADDRESS, undefined, network),
+        wrappedNativeAddress: resolved(cfg.ROBINHOOD_WRAPPED_NATIVE_ADDRESS, undefined, network),
+      };
+    }
   }
 }
 
 export function isEvmChain(chain: Chain): chain is EvmChain {
-  return chain === "ethereum" || chain === "bsc" || chain === "base";
+  return (
+    chain === "ethereum" ||
+    chain === "bsc" ||
+    chain === "base" ||
+    chain === "monad" ||
+    chain === "robinhood"
+  );
 }
 
 export { evmConfig };

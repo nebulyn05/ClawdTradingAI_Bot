@@ -43,17 +43,11 @@ describe("parseNativeAmount", () => {
 });
 
 describe("nativeQuoteAddress", () => {
-  it("returns the WSOL mint for solana and the sentinel for EVM chains", async () => {
+  it("returns the WSOL mint for solana and the sentinel for every EVM-family chain", async () => {
     const { nativeQuoteAddress, NATIVE_TOKEN_ADDRESS } = await import("./index.js");
     expect(nativeQuoteAddress("solana")).toBe("So11111111111111111111111111111111111111112");
-    expect(nativeQuoteAddress("ethereum")).toBe(NATIVE_TOKEN_ADDRESS);
-    expect(nativeQuoteAddress("bsc")).toBe(NATIVE_TOKEN_ADDRESS);
-    expect(nativeQuoteAddress("base")).toBe(NATIVE_TOKEN_ADDRESS);
-  });
-
-  it("throws for chains with no native quote address defined", async () => {
-    const { nativeQuoteAddress } = await import("./index.js");
-    expect(() => nativeQuoteAddress("monad")).toThrow();
-    expect(() => nativeQuoteAddress("robinhood")).toThrow();
+    for (const chain of ["ethereum", "bsc", "base", "monad", "robinhood"] as const) {
+      expect(nativeQuoteAddress(chain)).toBe(NATIVE_TOKEN_ADDRESS);
+    }
   });
 });

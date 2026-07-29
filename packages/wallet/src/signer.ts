@@ -3,15 +3,13 @@ import { generateSolanaKey, importSolanaKey } from "./chains/solana.js";
 import { generateEvmKey, importEvmKey } from "./chains/evm.js";
 import { encryptPrivateKey, decryptPrivateKey } from "./envelope.js";
 
-const EVM_CHAINS: readonly Chain[] = ["ethereum", "bsc", "base"];
-const UNSUPPORTED_CHAINS: readonly Chain[] = ["monad", "robinhood"];
+// Monad and Robinhood Chain are EVM-compatible (same 0x-hex key format as
+// Ethereum/BSC/Base), so wallet generation/import needs no new code for them.
+const EVM_CHAINS: readonly Chain[] = ["ethereum", "bsc", "base", "monad", "robinhood"];
 
 function assertSupported(chain: Chain): void {
-  if (UNSUPPORTED_CHAINS.includes(chain)) {
-    throw new Error(
-      `Wallet support for "${chain}" is not implemented yet (no verified RPC/SDK integration). ` +
-        "See packages/chains/src/monad and /robinhood for the stub adapter.",
-    );
+  if (chain !== "solana" && !EVM_CHAINS.includes(chain)) {
+    throw new Error(`Wallet support for "${chain}" is not implemented.`);
   }
 }
 

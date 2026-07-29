@@ -1,7 +1,8 @@
 import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
-import { loadConfig } from "@clawd/core";
+import { loadConfig, networkForChain } from "@clawd/core";
 import type { Quote, TxResult } from "@clawd/core";
+import { submitViaJitoBundle } from "./jito.js";
 
 interface JupiterQuoteResponse {
   inputMint: string;
@@ -67,7 +68,11 @@ export async function executeJupiterSwap(
   const tx = VersionedTransaction.deserialize(Buffer.from(swapTransaction, "base64"));
   tx.sign([keypair]);
 
-  const signature = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
+  const cfg = loadConfig();
+  const signature =
+    cfg.JITO_ENABLED && networkForChain("solana") === "mainnet"
+      ? await submitViaJitoBundle(connection, keypair, tx)
+      : await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
   const confirmation = await connection.confirmTransaction(signature, "confirmed");
 
   const amountInNum = Number(quote.amountIn);

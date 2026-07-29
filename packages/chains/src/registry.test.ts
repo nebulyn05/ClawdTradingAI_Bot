@@ -8,23 +8,13 @@ beforeAll(() => {
 });
 
 describe("chain adapter registry", () => {
-  it("returns an enabled adapter for each supported chain", async () => {
+  it("returns an enabled adapter for all 6 chains — no stubs", async () => {
     const { getChainAdapter } = await import("./registry.js");
-    for (const chain of ["solana", "ethereum", "bsc", "base"] as const) {
+    for (const chain of ["solana", "ethereum", "bsc", "base", "monad", "robinhood"] as const) {
       const adapter = getChainAdapter(chain);
       expect(adapter.chain).toBe(chain);
       expect(adapter.enabled).toBe(true);
       expect(adapter.network).toBe("testnet");
-    }
-  });
-
-  it("returns a disabled stub adapter for monad and robinhood", async () => {
-    const { getChainAdapter } = await import("./registry.js");
-    for (const chain of ["monad", "robinhood"] as const) {
-      const adapter = getChainAdapter(chain);
-      expect(adapter.enabled).toBe(false);
-      await expect(adapter.getBalance("anything")).rejects.toThrow(/not integrated yet/);
-      await expect(adapter.getQuote("a", "b", 1n)).rejects.toThrow(/not integrated yet/);
     }
   });
 

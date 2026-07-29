@@ -10,6 +10,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Quote, TxResult } from "@clawd/core";
 import { evmConfig, type EvmChain } from "./config.js";
 import { ROUTER_V2_ABI, ERC20_ABI, NATIVE_TOKEN_ADDRESS } from "./abis.js";
+import { getSubmitTransport } from "./submit-client.js";
 
 function requireRouter(chain: EvmChain) {
   const cfg = evmConfig(chain);
@@ -102,7 +103,7 @@ export async function executeUniswapV2Swap(
   const walletClient = createWalletClient({
     account,
     chain: cfg.viemChain,
-    transport: http(cfg.rpcUrl),
+    transport: getSubmitTransport(chain),
   });
 
   const path = (quote.raw as { path: `0x${string}`[] }).path;
