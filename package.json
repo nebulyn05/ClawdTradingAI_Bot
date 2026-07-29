@@ -12,6 +12,7 @@
     "build": "npm run build --workspaces --if-present",
     "dev:bot": "npm run dev --workspace=apps/bot",
     "dev:worker": "npm run dev --workspace=apps/worker",
+    "dev:admin": "npm run dev --workspace=apps/admin",
     "test": "vitest run",
     "lint": "tsc -b --pretty",
     "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma",

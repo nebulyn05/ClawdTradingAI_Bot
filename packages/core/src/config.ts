@@ -175,6 +175,13 @@ const envSchema = z.object({
   // Admin dashboard rule engine — how often (ms) every active Rule is
   // re-evaluated against every user.
   RULE_ENGINE_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+
+  // Admin dashboard auth — single operator account, not a multi-tenant admin
+  // system. Generate the hash with the same scrypt helper the wallet
+  // package uses for the export passphrase (see README).
+  ADMIN_USERNAME: z.string().optional().default(""),
+  ADMIN_PASSWORD_HASH: z.string().optional().default(""),
+  ADMIN_SESSION_SECRET: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof envSchema>;
