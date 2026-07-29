@@ -148,6 +148,10 @@ const envSchema = z.object({
   // replaces it — see packages/specialists/arbiter/src/scan.ts.
   ARBITER_ASSUMED_BRIDGE_COST_PCT: z.coerce.number().min(0).max(1).default(0.005),
   ARBITER_MIN_SPREAD_PCT: z.coerce.number().min(0).max(1).default(0.01),
+  // Notional size (in the asset's own units, e.g. USDC) used when requesting
+  // a real LI.FI quote to confirm the bridge cost — bridge fees aren't flat,
+  // so this should roughly match the size Arbiter would actually move.
+  ARBITER_QUOTE_SIZE: z.coerce.number().positive().default(1000),
 
   // AI features (Guard's qualitative final gate, Scout's tweet interpretation,
   // Router's periodic TP/SL reasoning) — all off by default since a working

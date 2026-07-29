@@ -2,7 +2,7 @@ export * from "./types.js";
 export * from "./registry.js";
 export { createSolanaAdapter } from "./solana/adapter.js";
 export { createEvmAdapter } from "./evm/adapter.js";
-export { isEvmChain, type EvmChain } from "./evm/config.js";
+export { isEvmChain, evmConfig, type EvmChain, type EvmChainConfig } from "./evm/config.js";
 export { NATIVE_TOKEN_ADDRESS } from "./evm/abis.js";
 export {
   nativeQuoteAddress,

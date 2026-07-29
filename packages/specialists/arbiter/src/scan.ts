@@ -3,17 +3,25 @@ import { getChainAdapter } from "@clawd/chains";
 import { getTokenPriceUsd } from "@clawd/pricing";
 import { ARB_ASSETS } from "./assets.js";
 import { findSpreadCandidates } from "./spread.js";
+import { getLifiBridgeCostPct } from "./lifi-quote.js";
 
 const log = createLogger("arbiter");
 
 /**
- * Scans the tracked asset list for cross-chain price spreads. The bridging
- * cost used to filter noise is currently a fixed assumption
- * (ARBITER_ASSUMED_BRIDGE_COST_PCT), not a live quote — LI.FI's docs weren't
- * reachable to confirm the exact request format for a real integration, so
- * this is intentionally conservative rather than guessing at an API shape.
- * Detection only: this does not execute trades. Cross-chain execution
- * (buy + bridge + sell) is a separate, not-yet-built follow-up.
+ * Scans the tracked asset list for cross-chain price spreads.
+ *
+ * Two-pass filter: a cheap first pass uses ARBITER_ASSUMED_BRIDGE_COST_PCT
+ * (a fixed guess) purely to avoid spending a LI.FI request on hopeless
+ * pairs; every candidate that clears it then gets a *real* LI.FI quote
+ * (lifi-quote.ts) for the actual bridge cost at the configured notional
+ * size, and only survives if the spread still clears that real cost. If
+ * LI.FI doesn't cover a chain (Monad/Robinhood aren't in its chain list) or
+ * a request fails, that pair falls back to the fixed assumption rather than
+ * being dropped outright.
+ *
+ * Still detection-only for chains LI.FI can't execute against — see
+ * execute.ts for what cross-chain execution actually supports today
+ * (EVM<->EVM; Solana legs aren't wired for execution, only quoting).
  */
 export async function scanForArbitrage(chains?: Chain[]): Promise<ArbitrageOpportunity[]> {
   const cfg = loadConfig();
@@ -37,13 +45,23 @@ export async function scanForArbitrage(chains?: Chain[]): Promise<ArbitrageOppor
       if (price !== null) prices[chain] = price;
     }
 
-    const candidates = findSpreadCandidates(
+    const preFiltered = findSpreadCandidates(
       prices,
       cfg.ARBITER_ASSUMED_BRIDGE_COST_PCT,
       cfg.ARBITER_MIN_SPREAD_PCT,
     );
 
-    for (const c of candidates) {
+    const quoteAmountRaw = BigInt(Math.round(cfg.ARBITER_QUOTE_SIZE * 10 ** asset.decimals));
+
+    for (const c of preFiltered) {
+      const buyAddress = asset.addresses[c.buyChain];
+      const realCostPct = buyAddress
+        ? await getLifiBridgeCostPct(c.buyChain, c.sellChain, buyAddress, quoteAmountRaw)
+        : null;
+      const bridgeCostPct = realCostPct ?? cfg.ARBITER_ASSUMED_BRIDGE_COST_PCT;
+
+      if (c.spreadPct <= bridgeCostPct + cfg.ARBITER_MIN_SPREAD_PCT) continue;
+
       const opportunity: ArbitrageOpportunity = {
         asset: asset.symbol,
         buyChain: c.buyChain,
@@ -51,7 +69,7 @@ export async function scanForArbitrage(chains?: Chain[]): Promise<ArbitrageOppor
         buyPrice: c.buyPrice,
         sellPrice: c.sellPrice,
         spreadPct: c.spreadPct,
-        estimatedBridgeCostPct: cfg.ARBITER_ASSUMED_BRIDGE_COST_PCT,
+        estimatedBridgeCostPct: bridgeCostPct,
         detectedAt: Date.now(),
       };
       log.info(opportunity, "Arbitrage opportunity detected");

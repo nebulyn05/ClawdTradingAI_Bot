@@ -5,5 +5,10 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "references": [{ "path": "../../core" }, { "path": "../../chains" }, { "path": "../../pricing" }]
+  "references": [
+    { "path": "../../core" },
+    { "path": "../../chains" },
+    { "path": "../../pricing" },
+    { "path": "../../wallet" }
+  ]
 }

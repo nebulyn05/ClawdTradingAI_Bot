@@ -43,10 +43,13 @@ function wireEventBus(): void {
     log.info(signal, "KOL signal");
     void handleTradeCandidate(signal.chain, signal.tokenAddress, "scout");
   });
-  // Arbiter is detection-only for now — cross-chain execution (buy + bridge +
-  // sell) isn't built yet, so opportunities are logged, not auto-traded.
+  // Arbiter's cost estimate is a real LI.FI quote now (see scan.ts), and the
+  // bridging primitive itself (@clawd/arbiter's executeCrossChainArbitrage,
+  // EVM<->EVM only) is real too — but there's no orchestrator yet that picks
+  // a user's wallets on both chains and runs the full buy -> bridge -> sell,
+  // so opportunities are still logged rather than auto-traded.
   eventBus.on("arbiter.opportunity", (opportunity) => {
-    log.info(opportunity, "Arbitrage opportunity (detection only, not auto-traded)");
+    log.info(opportunity, "Arbitrage opportunity (real cost estimate, not yet auto-traded)");
   });
 }
 
