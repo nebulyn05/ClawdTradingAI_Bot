@@ -7,19 +7,12 @@ import {
   hashPassphrase,
   verifyPassphrase,
 } from "@clawd/wallet";
-import { getChainAdapter } from "@clawd/chains";
+import { getChainAdapter, formatNativeAmount, parseNativeAmount } from "@clawd/chains";
+
+export { formatNativeAmount, parseNativeAmount };
 
 /** Chains with a real, working adapter. Monad/Robinhood are excluded from auto-provisioning. */
 export const SUPPORTED_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base"];
-
-const NATIVE_DECIMALS: Record<Chain, number> = {
-  solana: 9,
-  ethereum: 18,
-  bsc: 18,
-  base: 18,
-  monad: 18,
-  robinhood: 18,
-};
 
 function toEncryptedKey(wallet: Wallet): EncryptedKey {
   return {
@@ -116,25 +109,12 @@ export async function exportWalletKey(userId: string, chain: Chain): Promise<str
   return exportRawKey(toEncryptedKey(wallet));
 }
 
-/** Formats a raw native-unit bigint (lamports/wei) as a human-readable decimal string. */
-export function formatNativeAmount(chain: Chain, raw: bigint): string {
-  const decimals = NATIVE_DECIMALS[chain];
-  const divisor = 10n ** BigInt(decimals);
-  const whole = raw / divisor;
-  const frac = (raw % divisor).toString().padStart(decimals, "0").slice(0, 6).replace(/0+$/, "");
-  return frac ? `${whole}.${frac}` : whole.toString();
-}
-
-/** Parses a human-typed decimal amount (e.g. "0.5") into raw native units (lamports/wei). */
-export function parseNativeAmount(chain: Chain, input: string): bigint {
-  const decimals = NATIVE_DECIMALS[chain];
-  const trimmed = input.trim();
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
-    throw new Error(`"${input}" isn't a valid amount.`);
-  }
-  const [wholeStr = "0", fracStr = ""] = trimmed.split(".");
-  const paddedFrac = (fracStr + "0".repeat(decimals)).slice(0, decimals);
-  return BigInt(wholeStr) * 10n ** BigInt(decimals) + BigInt(paddedFrac || "0");
+/** Toggles whether the worker's Sniper/Guard/Router pipeline may trade this wallet. */
+export async function setWalletActive(userId: string, chain: Chain, active: boolean) {
+  return getDb().wallet.update({
+    where: { userId_chain_network: { userId, chain, network: networkForChain(chain) } },
+    data: { active },
+  });
 }
 
 /** Live native-token balance for a user's wallet on `chain`, via that chain's adapter. */

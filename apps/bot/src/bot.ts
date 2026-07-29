@@ -2,12 +2,15 @@ import { Bot, session } from "grammy";
 import { conversations, createConversation } from "@grammyjs/conversations";
 import { loadConfig, createLogger } from "@clawd/core";
 import type { BotContext, SessionData } from "./types.js";
+import type { Chain } from "@clawd/core";
 import {
   ensureWalletsForUser,
   listWallets,
   getOrCreateUser,
   getWalletBalance,
   formatNativeAmount,
+  setWalletActive,
+  SUPPORTED_CHAINS,
 } from "./wallet-service.js";
 import { importWalletConversation } from "./conversations/import-wallet.js";
 import { exportKeyConversation } from "./conversations/export-key.js";
@@ -53,6 +56,8 @@ export function createBot(): Bot<BotContext> {
         "/import — import an existing wallet instead of a generated one\n" +
         "/export — export a wallet's raw private key\n" +
         "/withdraw — send native tokens out to another address\n" +
+        "/deploy <chain> — let the bot auto-trade that wallet\n" +
+        "/pause <chain> — stop auto-trading that wallet\n" +
         "/help — show this again",
     );
   });
@@ -63,7 +68,9 @@ export function createBot(): Bot<BotContext> {
         "/wallets — list your wallets and live balances\n" +
         "/import — import an existing wallet\n" +
         "/export — export a raw private key (requires a passphrase)\n" +
-        "/withdraw — send native tokens out to another address",
+        "/withdraw — send native tokens out to another address\n" +
+        "/deploy <chain> — let the bot auto-trade that wallet\n" +
+        "/pause <chain> — stop auto-trading that wallet",
     );
   });
 
@@ -76,16 +83,40 @@ export function createBot(): Bot<BotContext> {
     await ctx.reply("Fetching balances...");
     const lines = await Promise.all(
       wallets.map(async (w) => {
+        const status = w.active ? "🟢 deployed" : "⚪ paused";
         try {
           const balance = await getWalletBalance(ctx.userId, w.chain);
-          return `• ${w.chain} (${w.network}): ${w.address}\n   balance: ${formatNativeAmount(w.chain, balance)}`;
+          return `• ${w.chain} (${w.network}) ${status}: ${w.address}\n   balance: ${formatNativeAmount(w.chain, balance)}`;
         } catch (err) {
-          return `• ${w.chain} (${w.network}): ${w.address}\n   balance: unavailable (${err instanceof Error ? err.message : "error"})`;
+          return `• ${w.chain} (${w.network}) ${status}: ${w.address}\n   balance: unavailable (${err instanceof Error ? err.message : "error"})`;
         }
       }),
     );
     await ctx.reply(lines.join("\n"));
   });
+
+  const setDeployState = (active: boolean) => async (ctx: BotContext) => {
+    const chain = ctx.match?.toString().trim().toLowerCase() as Chain | undefined;
+    if (!chain || !SUPPORTED_CHAINS.includes(chain)) {
+      await ctx.reply(
+        `Usage: /${active ? "deploy" : "pause"} <chain> — one of: ${SUPPORTED_CHAINS.join(", ")}`,
+      );
+      return;
+    }
+    try {
+      await setWalletActive(ctx.userId, chain, active);
+      await ctx.reply(
+        active
+          ? `${chain} wallet deployed — Sniper/Guard/Router will auto-trade it now.`
+          : `${chain} wallet paused — no new auto-trades will open on it.`,
+      );
+    } catch (err) {
+      await ctx.reply(`Failed: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  };
+
+  bot.command("deploy", setDeployState(true));
+  bot.command("pause", setDeployState(false));
 
   bot.command("import", async (ctx) => {
     await ctx.conversation.enter("importWallet");

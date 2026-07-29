@@ -54,6 +54,11 @@ const envSchema = z.object({
   PROFIT_FEE_RATE: z.coerce.number().min(0).max(1).default(0.02),
   FEE_TREASURY_SOLANA_ADDRESS: z.string().optional().default(""),
   FEE_TREASURY_EVM_ADDRESS: z.string().optional().default(""),
+
+  TAKE_PROFIT_PCT: z.coerce.number().min(0).default(0.5),
+  STOP_LOSS_PCT: z.coerce.number().min(0).max(1).default(0.2),
+  MAX_CONCURRENT_POSITIONS_PER_CHAIN: z.coerce.number().int().min(1).default(3),
+  POSITION_MONITOR_INTERVAL_MS: z.coerce.number().int().min(1000).default(15_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

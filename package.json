@@ -5,7 +5,8 @@
   "description": "Clawd Agents — multi-chain autonomous crypto trading bot on Telegram",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "packages/specialists/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

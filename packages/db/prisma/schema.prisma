@@ -70,6 +70,11 @@ model Wallet {
   network NetworkMode @default(testnet)
   address String
 
+  /// Whether this wallet is opted in to autonomous trading (Sniper/Scout/Arbiter signals).
+  active         Boolean @default(false)
+  /// Native-token amount (decimal string, e.g. "0.05") Router spends per opened position.
+  tradeSizeNative String @default("0.05")
+
   // Envelope-encrypted private key (see @clawd/wallet). Never store plaintext.
   encCiphertext    String
   encAuthTag       String
