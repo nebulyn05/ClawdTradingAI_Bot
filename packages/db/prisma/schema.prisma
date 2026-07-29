@@ -44,6 +44,7 @@ enum SignalSource {
   scout
   arbiter
   manual
+  admin_rule
 }
 
 model User {

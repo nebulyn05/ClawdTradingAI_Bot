@@ -58,7 +58,7 @@ export interface ArbitrageOpportunity {
   detectedAt: number;
 }
 
-export type SignalSource = "sniper" | "scout" | "arbiter";
+export type SignalSource = "sniper" | "scout" | "arbiter" | "manual" | "admin_rule";
 
 /** A candidate trade opportunity fed into Guard for screening. */
 export interface TradeCandidate {
@@ -102,10 +102,22 @@ export interface TxResult {
 export type PositionStatus = "open" | "closed";
 export type ExitReason = "take_profit" | "stop_loss" | "manual" | "guard_exit";
 
+/** A KOL/Twitter call, interpreted by an LLM into a chain + token + conviction. */
+export interface KolSignal {
+  chain: Chain;
+  tokenAddress: string;
+  handle: string;
+  sentiment: "bullish" | "bearish" | "neutral";
+  conviction: number;
+  tweetText: string;
+  detectedAt: number;
+}
+
 /** Domain events published on the internal EventBus, connecting specialists together. */
 export interface DomainEvents {
   "sniper.newPair": NewPairEvent;
   "scout.walletActivity": WalletActivity;
+  "scout.kolSignal": KolSignal;
   "arbiter.opportunity": ArbitrageOpportunity;
   "guard.result": SafetyCheckResult;
   "router.positionOpened": {

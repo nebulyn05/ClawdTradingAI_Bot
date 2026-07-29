@@ -8,7 +8,7 @@ import {
 } from "@clawd/core";
 import { getDb } from "@clawd/db";
 import { startSniper } from "@clawd/sniper";
-import { startScout } from "@clawd/scout";
+import { startScout, startKolTracking } from "@clawd/scout";
 import { startArbiter } from "@clawd/arbiter";
 import { getOrScreenToken } from "@clawd/guard";
 import { openPosition, startPositionMonitor, startAiTpSlReview } from "@clawd/router";
@@ -39,6 +39,10 @@ function wireEventBus(): void {
   eventBus.on("scout.walletActivity", (activity) => {
     void handleTradeCandidate(activity.chain, activity.tokenAddress, "scout");
   });
+  eventBus.on("scout.kolSignal", (signal) => {
+    log.info(signal, "KOL signal");
+    void handleTradeCandidate(signal.chain, signal.tokenAddress, "scout");
+  });
   // Arbiter is detection-only for now — cross-chain execution (buy + bridge +
   // sell) isn't built yet, so opportunities are logged, not auto-traded.
   eventBus.on("arbiter.opportunity", (opportunity) => {
@@ -53,6 +57,7 @@ async function main() {
   wireEventBus();
   const stopSniper = startSniper();
   const stopScout = await startScout();
+  const stopKolTracking = startKolTracking();
   const stopArbiter = startArbiter(cfg.ARBITER_SCAN_INTERVAL_MS);
   const stopMonitor = startPositionMonitor(cfg.POSITION_MONITOR_INTERVAL_MS);
   // No-op when AI_FEATURES_ENABLED is false — reviewTpSlWithAi short-circuits.
@@ -69,6 +74,7 @@ async function main() {
     log.info("Shutting down worker...");
     stopSniper();
     stopScout();
+    stopKolTracking();
     stopArbiter();
     stopMonitor();
     stopAiTpSl();

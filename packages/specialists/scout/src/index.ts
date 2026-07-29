@@ -2,6 +2,8 @@ import { getDb } from "@clawd/db";
 import { eventBus, createLogger, type Chain } from "@clawd/core";
 import { getChainAdapter, type Unsubscribe } from "@clawd/chains";
 
+export { startKolTracking } from "./kol.js";
+
 const log = createLogger("scout");
 
 const DEFAULT_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base", "monad", "robinhood"];
