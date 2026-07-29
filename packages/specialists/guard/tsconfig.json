@@ -9,6 +9,7 @@
     { "path": "../../core" },
     { "path": "../../db" },
     { "path": "../../pricing" },
-    { "path": "../../chains" }
+    { "path": "../../chains" },
+    { "path": "../../ai" }
   ]
 }

@@ -11,7 +11,7 @@ import { startSniper } from "@clawd/sniper";
 import { startScout } from "@clawd/scout";
 import { startArbiter } from "@clawd/arbiter";
 import { getOrScreenToken } from "@clawd/guard";
-import { openPosition, startPositionMonitor } from "@clawd/router";
+import { openPosition, startPositionMonitor, startAiTpSlReview } from "@clawd/router";
 
 const log = createLogger("worker:main");
 
@@ -55,6 +55,8 @@ async function main() {
   const stopScout = await startScout();
   const stopArbiter = startArbiter(cfg.ARBITER_SCAN_INTERVAL_MS);
   const stopMonitor = startPositionMonitor(cfg.POSITION_MONITOR_INTERVAL_MS);
+  // No-op when AI_FEATURES_ENABLED is false — reviewTpSlWithAi short-circuits.
+  const stopAiTpSl = startAiTpSlReview(cfg.AI_TP_SL_REVIEW_INTERVAL_MS);
   // The bot runs in a separate process — bridge the events it needs for
   // user-facing notifications out over Redis (see @clawd/core/redis-bridge).
   const stopPublishing = startPublishingToRedis([
@@ -69,6 +71,7 @@ async function main() {
     stopScout();
     stopArbiter();
     stopMonitor();
+    stopAiTpSl();
     stopPublishing();
     process.exit(0);
   };

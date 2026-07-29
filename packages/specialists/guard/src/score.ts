@@ -2,6 +2,7 @@ import { eventBus, createLogger, type Chain, type SafetyCheckResult } from "@cla
 import { getDb } from "@clawd/db";
 import { getBestPair } from "@clawd/pricing";
 import { isEvmChain } from "@clawd/chains";
+import { reviewTokenWithAi } from "@clawd/ai";
 import { getEvmTokenSecurity, getSolanaTokenSecurity, GOPLUS_EVM_CHAIN_IDS } from "./goplus.js";
 import { computeSolanaScore, computeEvmScore, type ScoreResult } from "./rules.js";
 
@@ -16,6 +17,11 @@ const log = createLogger("guard:score");
  * score with a documented reason rather than hard-failing — otherwise
  * nothing would ever pass Guard while developing against testnets. See
  * rules.ts for the actual scoring logic.
+ *
+ * If the mechanical checks pass, one more gate runs: an AI qualitative
+ * review (packages/ai/src/guard-review.ts). This is the final say — a
+ * mechanical pass with an AI rejection is an overall rejection. When AI
+ * features are disabled (the default), that review is a no-op pass-through.
  */
 export async function screenToken(chain: Chain, tokenAddress: string): Promise<SafetyCheckResult> {
   const pair = await getBestPair(chain, tokenAddress).catch((err) => {
@@ -31,6 +37,17 @@ export async function screenToken(chain: Chain, tokenAddress: string): Promise<S
     scored = computeEvmScore(liquidityUsd, await getEvmTokenSecurity(GOPLUS_EVM_CHAIN_IDS[chain], tokenAddress));
   } else {
     scored = { checks: {}, reasons: [`No Guard rules defined for chain "${chain}"`], score: 0, passed: false };
+  }
+
+  if (scored.passed) {
+    const preliminary: SafetyCheckResult = { chain, tokenAddress, checkedAt: Date.now(), ...scored };
+    const aiReview = await reviewTokenWithAi(chain, tokenAddress, preliminary);
+    scored = {
+      ...scored,
+      checks: { ...scored.checks, aiReviewApproved: aiReview.approved },
+      passed: aiReview.approved,
+      reasons: aiReview.approved ? scored.reasons : [...scored.reasons, `AI review: ${aiReview.reasoning}`],
+    };
   }
 
   const result: SafetyCheckResult = { chain, tokenAddress, checkedAt: Date.now(), ...scored };

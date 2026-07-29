@@ -4,6 +4,8 @@ import { getBestPair } from "./dexscreener.js";
 
 export * from "./birdeye.js";
 export * from "./dexscreener.js";
+export * from "./pyth.js";
+export * from "./chainlink.js";
 
 /**
  * Best-effort unified USD price lookup: tries Birdeye for Solana (when

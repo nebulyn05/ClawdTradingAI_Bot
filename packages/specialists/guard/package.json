@@ -14,7 +14,8 @@
     "@clawd/core": "*",
     "@clawd/db": "*",
     "@clawd/pricing": "*",
-    "@clawd/chains": "*"
+    "@clawd/chains": "*",
+    "@clawd/ai": "*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

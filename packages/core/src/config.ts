@@ -148,6 +148,25 @@ const envSchema = z.object({
   // replaces it — see packages/specialists/arbiter/src/scan.ts.
   ARBITER_ASSUMED_BRIDGE_COST_PCT: z.coerce.number().min(0).max(1).default(0.005),
   ARBITER_MIN_SPREAD_PCT: z.coerce.number().min(0).max(1).default(0.01),
+
+  // AI features (Guard's qualitative final gate, Scout's tweet interpretation,
+  // Router's periodic TP/SL reasoning) — all off by default since a working
+  // Anthropic API key isn't guaranteed to exist yet. Everything degrades to
+  // rule-based-only behavior when this is false.
+  AI_FEATURES_ENABLED: boolFromString(false),
+  ANTHROPIC_API_KEY: z.string().optional().default(""),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
+  // How often (ms) Router re-evaluates TP/SL for each open position via the
+  // AI reasoning pass — separate from and much slower than the position
+  // monitor's per-tick deterministic price check.
+  AI_TP_SL_REVIEW_INTERVAL_MS: z.coerce.number().int().min(60_000).default(5 * 60_000),
+
+  // X (Twitter) API v2 — Scout's KOL tracking. Bearer token required; the
+  // tiers that support monitoring specific accounts' posts are paid.
+  TWITTER_BEARER_TOKEN: z.string().optional().default(""),
+  // Comma-separated X/Twitter handles (no @) Scout watches for token calls.
+  KOL_TWITTER_HANDLES: z.string().optional().default(""),
+  TWITTER_POLL_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
 });
 
 export type Env = z.infer<typeof envSchema>;
