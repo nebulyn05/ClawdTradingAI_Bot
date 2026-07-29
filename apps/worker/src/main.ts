@@ -1,44 +1,59 @@
-import { eventBus, loadConfig, createLogger } from "@clawd/core";
+import { eventBus, loadConfig, createLogger, type Chain, type SignalSource } from "@clawd/core";
 import { getDb } from "@clawd/db";
 import { startSniper } from "@clawd/sniper";
+import { startScout } from "@clawd/scout";
+import { startArbiter } from "@clawd/arbiter";
 import { getOrScreenToken } from "@clawd/guard";
 import { openPosition, startPositionMonitor } from "@clawd/router";
 
 const log = createLogger("worker:main");
 
-function wireSniperToGuardAndRouter(): void {
-  eventBus.on("sniper.newPair", (pair) => {
-    void (async () => {
-      log.info({ chain: pair.chain, tokenAddress: pair.tokenAddress }, "Screening new pair");
-      const result = await getOrScreenToken(pair.chain, pair.tokenAddress).catch((err) => {
-        log.warn({ err, pair }, "Guard screening failed");
-        return null;
-      });
-      if (!result || !result.passed) return;
+/** Shared Guard -> Router path for both Sniper and Scout signals. */
+async function handleTradeCandidate(chain: Chain, tokenAddress: string, source: SignalSource) {
+  log.info({ chain, tokenAddress, source }, "Screening candidate");
+  const result = await getOrScreenToken(chain, tokenAddress).catch((err) => {
+    log.warn({ err, chain, tokenAddress }, "Guard screening failed");
+    return null;
+  });
+  if (!result || !result.passed) return;
 
-      const activeWallets = await getDb().wallet.findMany({
-        where: { chain: pair.chain, active: true },
-      });
-      for (const wallet of activeWallets) {
-        openPosition(wallet.userId, pair.chain, pair.tokenAddress, "sniper").catch((err) =>
-          log.error({ err, userId: wallet.userId, pair }, "Failed to open position"),
-        );
-      }
-    })();
+  const activeWallets = await getDb().wallet.findMany({ where: { chain, active: true } });
+  for (const wallet of activeWallets) {
+    openPosition(wallet.userId, chain, tokenAddress, source).catch((err) =>
+      log.error({ err, userId: wallet.userId, chain, tokenAddress }, "Failed to open position"),
+    );
+  }
+}
+
+function wireEventBus(): void {
+  eventBus.on("sniper.newPair", (pair) => {
+    void handleTradeCandidate(pair.chain, pair.tokenAddress, "sniper");
+  });
+  eventBus.on("scout.walletActivity", (activity) => {
+    void handleTradeCandidate(activity.chain, activity.tokenAddress, "scout");
+  });
+  // Arbiter is detection-only for now — cross-chain execution (buy + bridge +
+  // sell) isn't built yet, so opportunities are logged, not auto-traded.
+  eventBus.on("arbiter.opportunity", (opportunity) => {
+    log.info(opportunity, "Arbitrage opportunity (detection only, not auto-traded)");
   });
 }
 
 async function main() {
   const cfg = loadConfig();
-  log.info("Starting Clawd Agents worker (Sniper -> Guard -> Router pipeline)");
+  log.info("Starting Clawd Agents worker (Sniper/Scout -> Guard -> Router, Arbiter detection)");
 
-  wireSniperToGuardAndRouter();
+  wireEventBus();
   const stopSniper = startSniper();
+  const stopScout = await startScout();
+  const stopArbiter = startArbiter(cfg.ARBITER_SCAN_INTERVAL_MS);
   const stopMonitor = startPositionMonitor(cfg.POSITION_MONITOR_INTERVAL_MS);
 
   const shutdown = () => {
     log.info("Shutting down worker...");
     stopSniper();
+    stopScout();
+    stopArbiter();
     stopMonitor();
     process.exit(0);
   };

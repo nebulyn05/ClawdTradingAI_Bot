@@ -59,6 +59,12 @@ const envSchema = z.object({
   STOP_LOSS_PCT: z.coerce.number().min(0).max(1).default(0.2),
   MAX_CONCURRENT_POSITIONS_PER_CHAIN: z.coerce.number().int().min(1).default(3),
   POSITION_MONITOR_INTERVAL_MS: z.coerce.number().int().min(1000).default(15_000),
+
+  ARBITER_SCAN_INTERVAL_MS: z.coerce.number().int().min(1000).default(30_000),
+  // Placeholder until a verified LI.FI (or similar) bridge-quote integration
+  // replaces it — see packages/specialists/arbiter/src/scan.ts.
+  ARBITER_ASSUMED_BRIDGE_COST_PCT: z.coerce.number().min(0).max(1).default(0.005),
+  ARBITER_MIN_SPREAD_PCT: z.coerce.number().min(0).max(1).default(0.01),
 });
 
 export type Env = z.infer<typeof envSchema>;
