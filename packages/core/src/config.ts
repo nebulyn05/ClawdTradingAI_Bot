@@ -44,6 +44,20 @@ const envSchema = z.object({
   BASE_TESTNET_RPC_URL: z.string().default("https://base-sepolia-rpc.publicnode.com"),
   BASE_MAINNET_RPC_URL: z.string().optional().default(""),
 
+  // Optional overrides for the Uniswap-V2-style factory/router/wrapped-native
+  // Sniper and Router use. Mainnet has working defaults (see evm/config.ts);
+  // testnets have none built in since there's no single canonical V2-fork
+  // deployment on most public testnets — set these once you've picked one.
+  ETHEREUM_FACTORY_ADDRESS: z.string().optional().default(""),
+  ETHEREUM_ROUTER_ADDRESS: z.string().optional().default(""),
+  ETHEREUM_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+  BSC_FACTORY_ADDRESS: z.string().optional().default(""),
+  BSC_ROUTER_ADDRESS: z.string().optional().default(""),
+  BSC_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+  BASE_FACTORY_ADDRESS: z.string().optional().default(""),
+  BASE_ROUTER_ADDRESS: z.string().optional().default(""),
+  BASE_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+
   ONEINCH_API_KEY: z.string().optional().default(""),
 
   BIRDEYE_API_KEY: z.string().optional().default(""),

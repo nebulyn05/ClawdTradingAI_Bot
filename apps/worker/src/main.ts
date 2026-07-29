@@ -1,4 +1,11 @@
-import { eventBus, loadConfig, createLogger, type Chain, type SignalSource } from "@clawd/core";
+import {
+  eventBus,
+  loadConfig,
+  createLogger,
+  startPublishingToRedis,
+  type Chain,
+  type SignalSource,
+} from "@clawd/core";
 import { getDb } from "@clawd/db";
 import { startSniper } from "@clawd/sniper";
 import { startScout } from "@clawd/scout";
@@ -48,6 +55,13 @@ async function main() {
   const stopScout = await startScout();
   const stopArbiter = startArbiter(cfg.ARBITER_SCAN_INTERVAL_MS);
   const stopMonitor = startPositionMonitor(cfg.POSITION_MONITOR_INTERVAL_MS);
+  // The bot runs in a separate process — bridge the events it needs for
+  // user-facing notifications out over Redis (see @clawd/core/redis-bridge).
+  const stopPublishing = startPublishingToRedis([
+    "router.positionOpened",
+    "router.positionClosed",
+    "guard.rejected",
+  ]);
 
   const shutdown = () => {
     log.info("Shutting down worker...");
@@ -55,6 +69,7 @@ async function main() {
     stopScout();
     stopArbiter();
     stopMonitor();
+    stopPublishing();
     process.exit(0);
   };
   process.once("SIGINT", shutdown);
