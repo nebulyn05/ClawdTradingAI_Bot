@@ -1,5 +1,5 @@
-import { getDb } from "@clawd/db";
-import { networkForChain, type Chain } from "@clawd/core";
+import { getDb, type Wallet } from "@clawd/db";
+import { networkForChain, type Chain, type EncryptedKey } from "@clawd/core";
 import {
   createWallet as generateWallet,
   importWallet as importRawWallet,
@@ -7,9 +7,41 @@ import {
   hashPassphrase,
   verifyPassphrase,
 } from "@clawd/wallet";
+import { getChainAdapter } from "@clawd/chains";
 
 /** Chains with a real, working adapter. Monad/Robinhood are excluded from auto-provisioning. */
 export const SUPPORTED_CHAINS: Chain[] = ["solana", "ethereum", "bsc", "base"];
+
+const NATIVE_DECIMALS: Record<Chain, number> = {
+  solana: 9,
+  ethereum: 18,
+  bsc: 18,
+  base: 18,
+  monad: 18,
+  robinhood: 18,
+};
+
+function toEncryptedKey(wallet: Wallet): EncryptedKey {
+  return {
+    ciphertext: wallet.encCiphertext,
+    authTag: wallet.encAuthTag,
+    iv: wallet.encIv,
+    wrappedDataKey: wallet.encWrappedDataKey,
+    wrapIv: wallet.encWrapIv,
+    wrapAuthTag: wallet.encWrapAuthTag,
+  };
+}
+
+function encryptedKeyColumns(encryptedKey: EncryptedKey) {
+  return {
+    encCiphertext: encryptedKey.ciphertext,
+    encAuthTag: encryptedKey.authTag,
+    encIv: encryptedKey.iv,
+    encWrappedDataKey: encryptedKey.wrappedDataKey,
+    encWrapIv: encryptedKey.wrapIv,
+    encWrapAuthTag: encryptedKey.wrapAuthTag,
+  };
+}
 
 export async function getOrCreateUser(telegramId: string, username?: string) {
   const db = getDb();
@@ -32,18 +64,7 @@ export async function ensureWalletsForUser(userId: string) {
     const network = networkForChain(chain);
     const { address, encryptedKey } = generateWallet(chain);
     const wallet = await db.wallet.create({
-      data: {
-        userId,
-        chain,
-        network,
-        address,
-        encCiphertext: encryptedKey.ciphertext,
-        encAuthTag: encryptedKey.authTag,
-        encIv: encryptedKey.iv,
-        encWrappedDataKey: encryptedKey.wrappedDataKey,
-        encWrapIv: encryptedKey.wrapIv,
-        encWrapAuthTag: encryptedKey.wrapAuthTag,
-      },
+      data: { userId, chain, network, address, ...encryptedKeyColumns(encryptedKey) },
     });
     created.push(wallet);
   }
@@ -67,18 +88,7 @@ export async function importWalletForUser(userId: string, chain: Chain, rawKey: 
   }
   const { address, encryptedKey } = importRawWallet(chain, rawKey);
   return db.wallet.create({
-    data: {
-      userId,
-      chain,
-      network: networkForChain(chain),
-      address,
-      encCiphertext: encryptedKey.ciphertext,
-      encAuthTag: encryptedKey.authTag,
-      encIv: encryptedKey.iv,
-      encWrappedDataKey: encryptedKey.wrappedDataKey,
-      encWrapIv: encryptedKey.wrapIv,
-      encWrapAuthTag: encryptedKey.wrapAuthTag,
-    },
+    data: { userId, chain, network: networkForChain(chain), address, ...encryptedKeyColumns(encryptedKey) },
   });
 }
 
@@ -103,12 +113,48 @@ export async function exportWalletKey(userId: string, chain: Chain): Promise<str
   const wallet = await getDb().wallet.findUniqueOrThrow({
     where: { userId_chain_network: { userId, chain, network: networkForChain(chain) } },
   });
-  return exportRawKey({
-    ciphertext: wallet.encCiphertext,
-    authTag: wallet.encAuthTag,
-    iv: wallet.encIv,
-    wrappedDataKey: wallet.encWrappedDataKey,
-    wrapIv: wallet.encWrapIv,
-    wrapAuthTag: wallet.encWrapAuthTag,
+  return exportRawKey(toEncryptedKey(wallet));
+}
+
+/** Formats a raw native-unit bigint (lamports/wei) as a human-readable decimal string. */
+export function formatNativeAmount(chain: Chain, raw: bigint): string {
+  const decimals = NATIVE_DECIMALS[chain];
+  const divisor = 10n ** BigInt(decimals);
+  const whole = raw / divisor;
+  const frac = (raw % divisor).toString().padStart(decimals, "0").slice(0, 6).replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole.toString();
+}
+
+/** Parses a human-typed decimal amount (e.g. "0.5") into raw native units (lamports/wei). */
+export function parseNativeAmount(chain: Chain, input: string): bigint {
+  const decimals = NATIVE_DECIMALS[chain];
+  const trimmed = input.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
+    throw new Error(`"${input}" isn't a valid amount.`);
+  }
+  const [wholeStr = "0", fracStr = ""] = trimmed.split(".");
+  const paddedFrac = (fracStr + "0".repeat(decimals)).slice(0, decimals);
+  return BigInt(wholeStr) * 10n ** BigInt(decimals) + BigInt(paddedFrac || "0");
+}
+
+/** Live native-token balance for a user's wallet on `chain`, via that chain's adapter. */
+export async function getWalletBalance(userId: string, chain: Chain): Promise<bigint> {
+  const wallet = await getDb().wallet.findUniqueOrThrow({
+    where: { userId_chain_network: { userId, chain, network: networkForChain(chain) } },
   });
+  return getChainAdapter(chain).getBalance(wallet.address);
+}
+
+/** Withdraws `amountInput` (human decimal, e.g. "0.5") of the native token to `toAddress`. */
+export async function withdrawFromWallet(
+  userId: string,
+  chain: Chain,
+  toAddress: string,
+  amountInput: string,
+) {
+  const wallet = await getDb().wallet.findUniqueOrThrow({
+    where: { userId_chain_network: { userId, chain, network: networkForChain(chain) } },
+  });
+  const amount = parseNativeAmount(chain, amountInput);
+  return getChainAdapter(chain).withdraw(toEncryptedKey(wallet), toAddress, amount);
 }

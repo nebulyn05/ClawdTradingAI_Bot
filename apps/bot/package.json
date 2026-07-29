@@ -13,6 +13,7 @@
     "@clawd/core": "*",
     "@clawd/db": "*",
     "@clawd/wallet": "*",
+    "@clawd/chains": "*",
     "grammy": "^1.30.0",
     "@grammyjs/conversations": "^1.2.0"
   },

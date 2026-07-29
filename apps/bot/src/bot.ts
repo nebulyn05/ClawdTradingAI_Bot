@@ -2,9 +2,16 @@ import { Bot, session } from "grammy";
 import { conversations, createConversation } from "@grammyjs/conversations";
 import { loadConfig, createLogger } from "@clawd/core";
 import type { BotContext, SessionData } from "./types.js";
-import { ensureWalletsForUser, listWallets, getOrCreateUser } from "./wallet-service.js";
+import {
+  ensureWalletsForUser,
+  listWallets,
+  getOrCreateUser,
+  getWalletBalance,
+  formatNativeAmount,
+} from "./wallet-service.js";
 import { importWalletConversation } from "./conversations/import-wallet.js";
 import { exportKeyConversation } from "./conversations/export-key.js";
+import { withdrawConversation } from "./conversations/withdraw.js";
 
 const log = createLogger("bot");
 
@@ -22,6 +29,7 @@ export function createBot(): Bot<BotContext> {
   bot.use(conversations());
   bot.use(createConversation(importWalletConversation, "importWallet"));
   bot.use(createConversation(exportKeyConversation, "exportKey"));
+  bot.use(createConversation(withdrawConversation, "withdraw"));
 
   // Resolve/create our internal User row for every incoming update before any command runs.
   bot.use(async (ctx, next) => {
@@ -41,9 +49,10 @@ export function createBot(): Bot<BotContext> {
         `Your wallets:\n${lines.join("\n")}\n\n` +
         "Deposit funds to the address for the chain you want to trade on.\n\n" +
         "Commands:\n" +
-        "/wallets — list your wallets\n" +
+        "/wallets — list your wallets and live balances\n" +
         "/import — import an existing wallet instead of a generated one\n" +
         "/export — export a wallet's raw private key\n" +
+        "/withdraw — send native tokens out to another address\n" +
         "/help — show this again",
     );
   });
@@ -51,9 +60,10 @@ export function createBot(): Bot<BotContext> {
   bot.command("help", async (ctx) => {
     await ctx.reply(
       "/start — onboarding + show wallets\n" +
-        "/wallets — list your wallets\n" +
+        "/wallets — list your wallets and live balances\n" +
         "/import — import an existing wallet\n" +
-        "/export — export a raw private key (requires a passphrase)",
+        "/export — export a raw private key (requires a passphrase)\n" +
+        "/withdraw — send native tokens out to another address",
     );
   });
 
@@ -63,11 +73,18 @@ export function createBot(): Bot<BotContext> {
       await ctx.reply("No wallets yet. Run /start to create them.");
       return;
     }
-    const lines = wallets.map((w) => `• ${w.chain} (${w.network}): ${w.address}`);
-    await ctx.reply(
-      `Your wallets:\n${lines.join("\n")}\n\n` +
-        "Balance lookups go live once chain adapters are wired in (next build phase).",
+    await ctx.reply("Fetching balances...");
+    const lines = await Promise.all(
+      wallets.map(async (w) => {
+        try {
+          const balance = await getWalletBalance(ctx.userId, w.chain);
+          return `• ${w.chain} (${w.network}): ${w.address}\n   balance: ${formatNativeAmount(w.chain, balance)}`;
+        } catch (err) {
+          return `• ${w.chain} (${w.network}): ${w.address}\n   balance: unavailable (${err instanceof Error ? err.message : "error"})`;
+        }
+      }),
     );
+    await ctx.reply(lines.join("\n"));
   });
 
   bot.command("import", async (ctx) => {
@@ -76,6 +93,10 @@ export function createBot(): Bot<BotContext> {
 
   bot.command("export", async (ctx) => {
     await ctx.conversation.enter("exportKey");
+  });
+
+  bot.command("withdraw", async (ctx) => {
+    await ctx.conversation.enter("withdraw");
   });
 
   bot.catch((err) => {

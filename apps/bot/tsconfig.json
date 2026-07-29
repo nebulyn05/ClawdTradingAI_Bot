@@ -8,6 +8,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/db" },
-    { "path": "../../packages/wallet" }
+    { "path": "../../packages/wallet" },
+    { "path": "../../packages/chains" }
   ]
 }

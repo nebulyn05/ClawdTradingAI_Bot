@@ -1,0 +1,24 @@
+{
+  "name": "@clawd/chains",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clawd/core": "*",
+    "@clawd/wallet": "*",
+    "@solana/web3.js": "^1.95.3",
+    "bs58": "^6.0.0",
+    "viem": "^2.21.19"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
