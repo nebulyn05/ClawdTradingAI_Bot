@@ -171,6 +171,10 @@ const envSchema = z.object({
   // Comma-separated X/Twitter handles (no @) Scout watches for token calls.
   KOL_TWITTER_HANDLES: z.string().optional().default(""),
   TWITTER_POLL_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+
+  // Admin dashboard rule engine — how often (ms) every active Rule is
+  // re-evaluated against every user.
+  RULE_ENGINE_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

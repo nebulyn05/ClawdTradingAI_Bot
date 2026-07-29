@@ -3,6 +3,7 @@ import {
   loadConfig,
   createLogger,
   startPublishingToRedis,
+  getBooleanSetting,
   type Chain,
   type SignalSource,
 } from "@clawd/core";
@@ -11,12 +12,18 @@ import { startSniper } from "@clawd/sniper";
 import { startScout, startKolTracking } from "@clawd/scout";
 import { startArbiter } from "@clawd/arbiter";
 import { getOrScreenToken } from "@clawd/guard";
-import { openPosition, startPositionMonitor, startAiTpSlReview } from "@clawd/router";
+import { openPosition, startPositionMonitor, startAiTpSlReview, startRuleEngine } from "@clawd/router";
 
 const log = createLogger("worker:main");
 
-/** Shared Guard -> Router path for both Sniper and Scout signals. */
+/** Shared Guard -> Router path for Sniper and Scout signals. */
 async function handleTradeCandidate(chain: Chain, tokenAddress: string, source: SignalSource) {
+  // Live on/off switch from the admin dashboard — checked per-candidate
+  // rather than tearing down the underlying subscription, since that's
+  // cheap and the subscription itself is expensive to restart.
+  const settingKey = source === "sniper" ? "SNIPER_ENABLED" : "SCOUT_ENABLED";
+  if (!(await getBooleanSetting(settingKey, true))) return;
+
   log.info({ chain, tokenAddress, source }, "Screening candidate");
   const result = await getOrScreenToken(chain, tokenAddress).catch((err) => {
     log.warn({ err, chain, tokenAddress }, "Guard screening failed");
@@ -48,7 +55,8 @@ function wireEventBus(): void {
   // EVM<->EVM only) is real too — but there's no orchestrator yet that picks
   // a user's wallets on both chains and runs the full buy -> bridge -> sell,
   // so opportunities are still logged rather than auto-traded.
-  eventBus.on("arbiter.opportunity", (opportunity) => {
+  eventBus.on("arbiter.opportunity", async (opportunity) => {
+    if (!(await getBooleanSetting("ARBITER_ENABLED", true))) return;
     log.info(opportunity, "Arbitrage opportunity (real cost estimate, not yet auto-traded)");
   });
 }
@@ -65,6 +73,8 @@ async function main() {
   const stopMonitor = startPositionMonitor(cfg.POSITION_MONITOR_INTERVAL_MS);
   // No-op when AI_FEATURES_ENABLED is false — reviewTpSlWithAi short-circuits.
   const stopAiTpSl = startAiTpSlReview(cfg.AI_TP_SL_REVIEW_INTERVAL_MS);
+  // Admin-dashboard-defined conditional triggers (e.g. "profit above X -> buy Y").
+  const stopRuleEngine = startRuleEngine(cfg.RULE_ENGINE_INTERVAL_MS);
   // The bot runs in a separate process — bridge the events it needs for
   // user-facing notifications out over Redis (see @clawd/core/redis-bridge).
   const stopPublishing = startPublishingToRedis([
@@ -81,6 +91,7 @@ async function main() {
     stopArbiter();
     stopMonitor();
     stopAiTpSl();
+    stopRuleEngine();
     stopPublishing();
     process.exit(0);
   };

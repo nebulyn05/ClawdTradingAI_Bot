@@ -102,6 +102,25 @@ export interface TxResult {
 export type PositionStatus = "open" | "closed";
 export type ExitReason = "take_profit" | "stop_loss" | "manual" | "guard_exit";
 
+/** Admin-defined rule condition — see packages/specialists/router/src/rules-engine.ts. */
+export interface RuleConditionProfitAbove {
+  type: "profitAbove";
+  chain: Chain;
+  /** Human decimal amount in the chain's native unit, e.g. "0.5". */
+  amountNative: string;
+}
+export type RuleCondition = RuleConditionProfitAbove;
+
+/** Admin-defined rule action, run once per user whose condition newly qualifies. */
+export interface RuleActionBuy {
+  type: "buy";
+  chain: Chain;
+  tokenAddress: string;
+  /** Human decimal amount in the chain's native unit, e.g. "0.1". */
+  sizeNative: string;
+}
+export type RuleAction = RuleActionBuy;
+
 /** A KOL/Twitter call, interpreted by an LLM into a chain + token + conviction. */
 export interface KolSignal {
   chain: Chain;

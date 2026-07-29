@@ -135,6 +135,8 @@ model Trade {
   amountOut   String
   price       Float
   feeAmount   String  @default("0")
+  /// Raw native-unit profit (nativeReceived - nativeSpent) — only meaningful on sell trades.
+  profitAmount String @default("0")
   profitable  Boolean @default(false)
   createdAt   DateTime @default(now())
 
@@ -185,4 +187,51 @@ model SafetyCheck {
 
   @@unique([chain, tokenAddress])
   @@map("safety_checks")
+}
+
+/// Runtime-tunable config overrides (admin dashboard writes these; the bot/
+/// worker read them live instead of only reading env vars once at boot).
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+/// Admin-defined conditional trigger, e.g. "users with profit above X buy token Y".
+model Rule {
+  id     String @id @default(cuid())
+  name   String
+  active Boolean @default(true)
+
+  /// { type: "profitAbove", chain, amountNative } — see packages/specialists/router/src/rules-engine.ts
+  condition Json
+  /// { type: "buy", chain, tokenAddress, sizeNative }
+  action    Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  executions RuleExecution[]
+
+  @@map("rules")
+}
+
+/// Audit log of every time a Rule actually fired for a user.
+model RuleExecution {
+  id       String @id @default(cuid())
+  ruleId   String
+  rule     Rule   @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  userId   String
+
+  positionId String?
+  status     String // "opened" | "skipped" | "failed"
+  details    Json?
+
+  triggeredAt DateTime @default(now())
+
+  @@index([ruleId])
+  @@index([userId])
+  @@map("rule_executions")
 }

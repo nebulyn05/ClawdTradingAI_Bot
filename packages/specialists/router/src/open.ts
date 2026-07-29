@@ -4,6 +4,7 @@ import {
   networkForChain,
   eventBus,
   createLogger,
+  getNumberSetting,
   type Chain,
   type SignalSource,
 } from "@clawd/core";
@@ -25,6 +26,8 @@ export async function openPosition(
   chain: Chain,
   tokenAddress: string,
   source: SignalSource,
+  /** Overrides the wallet's configured tradeSizeNative — used by the admin rule engine and manual trades. */
+  overrideSizeNative?: string,
 ) {
   const db = getDb();
   const cfg = loadConfig();
@@ -43,14 +46,18 @@ export async function openPosition(
     return null;
   }
 
+  const maxConcurrent = await getNumberSetting(
+    "MAX_CONCURRENT_POSITIONS_PER_CHAIN",
+    cfg.MAX_CONCURRENT_POSITIONS_PER_CHAIN,
+  );
   const openCount = await db.position.count({ where: { chain, status: "open" } });
-  if (openCount >= cfg.MAX_CONCURRENT_POSITIONS_PER_CHAIN) {
-    log.info({ chain, openCount }, "Skipping — chain concurrent-position cap reached");
+  if (openCount >= maxConcurrent) {
+    log.info({ chain, openCount, maxConcurrent }, "Skipping — chain concurrent-position cap reached");
     return null;
   }
 
   const adapter = getChainAdapter(chain);
-  const amountIn = parseNativeAmount(chain, wallet.tradeSizeNative);
+  const amountIn = parseNativeAmount(chain, overrideSizeNative ?? wallet.tradeSizeNative);
   const quote = await adapter.getQuote(nativeQuoteAddress(chain), tokenAddress, amountIn);
   const result = await adapter.executeSwap(toEncryptedKey(wallet), quote);
 
@@ -61,8 +68,12 @@ export async function openPosition(
 
   // Price is native-per-token so a rising price (token more expensive) reads as "up".
   const entryPrice = Number(result.amountIn) / Number(result.amountOut);
-  const takeProfitPrice = computeTakeProfitPrice(entryPrice, cfg.TAKE_PROFIT_PCT);
-  const stopLossPrice = computeStopLossPrice(entryPrice, cfg.STOP_LOSS_PCT);
+  const [takeProfitPct, stopLossPct] = await Promise.all([
+    getNumberSetting("TAKE_PROFIT_PCT", cfg.TAKE_PROFIT_PCT),
+    getNumberSetting("STOP_LOSS_PCT", cfg.STOP_LOSS_PCT),
+  ]);
+  const takeProfitPrice = computeTakeProfitPrice(entryPrice, takeProfitPct);
+  const stopLossPrice = computeStopLossPrice(entryPrice, stopLossPct);
 
   const position = await db.position.create({
     data: {

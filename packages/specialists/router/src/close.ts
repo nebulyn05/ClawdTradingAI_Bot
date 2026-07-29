@@ -1,5 +1,5 @@
 import { getDb } from "@clawd/db";
-import { loadConfig, eventBus, createLogger, type ExitReason } from "@clawd/core";
+import { loadConfig, eventBus, createLogger, getNumberSetting, type ExitReason } from "@clawd/core";
 import { getChainAdapter, nativeQuoteAddress } from "@clawd/chains";
 import { computeFeeRaw } from "./tp-sl.js";
 import { toEncryptedKey } from "./wallet-key.js";
@@ -41,7 +41,8 @@ export async function closePosition(positionId: string, reason: ExitReason) {
   const nativeReceivedRaw = BigInt(result.amountOut);
   const profitRaw = nativeReceivedRaw - nativeSpentRaw;
   const profitable = profitRaw > 0n;
-  const feeRaw = computeFeeRaw(profitRaw, cfg.PROFIT_FEE_RATE);
+  const feeRate = await getNumberSetting("PROFIT_FEE_RATE", cfg.PROFIT_FEE_RATE);
+  const feeRaw = computeFeeRaw(profitRaw, feeRate);
 
   // native received per token sold — same "native per token" unit as entryPrice.
   const exitPrice = Number(result.amountOut) / Number(result.amountIn);
@@ -56,6 +57,7 @@ export async function closePosition(positionId: string, reason: ExitReason) {
         amountOut: result.amountOut,
         price: exitPrice,
         feeAmount: feeRaw.toString(),
+        profitAmount: profitRaw.toString(),
         profitable,
       },
     });
