@@ -1,0 +1,29 @@
+{
+  "name": "clawd-agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clawd Agents — multi-chain autonomous crypto trading bot on Telegram",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:bot": "npm run dev --workspace=apps/bot",
+    "dev:worker": "npm run dev --workspace=apps/worker",
+    "test": "vitest run",
+    "lint": "tsc -b --pretty",
+    "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4",
+    "prisma": "^5.21.1",
+    "tsx": "^4.19.1",
+    "@types/node": "^22.7.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

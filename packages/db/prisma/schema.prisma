@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Chain {
+  solana
+  ethereum
+  bsc
+  base
+  monad
+  robinhood
+}
+
+enum NetworkMode {
+  testnet
+  mainnet
+}
+
+enum PositionStatus {
+  open
+  closed
+}
+
+enum ExitReason {
+  take_profit
+  stop_loss
+  manual
+  guard_exit
+}
+
+enum TradeSide {
+  buy
+  sell
+}
+
+enum SignalSource {
+  sniper
+  scout
+  arbiter
+  manual
+}
+
+model User {
+  id                    String   @id @default(cuid())
+  telegramId            String   @unique
+  telegramUsername      String?
+  /// Argon2 hash of the passphrase required to re-authenticate an export-key request.
+  exportPassphraseHash  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  wallets    Wallet[]
+  positions  Position[]
+  feeLedger  FeeLedger[]
+
+  @@map("users")
+}
+
+model Wallet {
+  id      String      @id @default(cuid())
+  userId  String
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chain   Chain
+  network NetworkMode @default(testnet)
+  address String
+
+  // Envelope-encrypted private key (see @clawd/wallet). Never store plaintext.
+  encCiphertext    String
+  encAuthTag       String
+  encIv            String
+  encWrappedDataKey String
+  encWrapIv        String
+  encWrapAuthTag   String
+
+  createdAt DateTime @default(now())
+
+  positions Position[]
+
+  @@unique([userId, chain, network])
+  @@index([address])
+  @@map("wallets")
+}
+
+model Position {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id])
+
+  chain         Chain
+  tokenAddress  String
+  source        SignalSource
+  status        PositionStatus @default(open)
+
+  entryPrice      Float
+  sizeAmountIn    String
+  takeProfitPrice Float
+  stopLossPrice   Float
+
+  exitPrice  Float?
+  exitReason ExitReason?
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  trades Trade[]
+
+  @@index([userId, status])
+  @@index([chain, tokenAddress])
+  @@map("positions")
+}
+
+model Trade {
+  id         String   @id @default(cuid())
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  side        TradeSide
+  txHash      String
+  amountIn    String
+  amountOut   String
+  price       Float
+  feeAmount   String  @default("0")
+  profitable  Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  feeLedgerEntry FeeLedger?
+
+  @@index([positionId])
+  @@map("trades")
+}
+
+model FeeLedger {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tradeId String @unique
+  trade   Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  chain       Chain
+  amount      String
+  collectedAt DateTime @default(now())
+
+  @@map("fee_ledger")
+}
+
+/// Smart-money / KOL wallet addresses that Scout watches for entry signals.
+model Watchlist {
+  id        String   @id @default(cuid())
+  chain     Chain
+  address   String
+  label     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([chain, address])
+  @@map("watchlist")
+}
+
+/// Cached Guard results so repeated screens of the same token are cheap.
+model SafetyCheck {
+  id           String   @id @default(cuid())
+  chain        Chain
+  tokenAddress String
+  passed       Boolean
+  score        Int
+  checks       Json
+  reasons      Json
+  checkedAt    DateTime @default(now())
+
+  @@unique([chain, tokenAddress])
+  @@map("safety_checks")
+}
