@@ -150,8 +150,12 @@ then `/deploy <chain>` to let the worker's pipeline auto-trade that wallet.
 hashed into `ADMIN_PASSWORD_HASH`:
 
 ```bash
-node -e "require('@clawd/wallet').hashPassphrase(process.argv[1]).then(console.log)" "your-password-here"
+DATABASE_URL=x REDIS_URL=x node -e "require('@clawd/wallet').hashPassphrase(process.argv[1]).then(console.log)" "your-password-here"
 ```
+
+(The dummy `DATABASE_URL`/`REDIS_URL` are required because importing
+`@clawd/wallet` transitively loads `@clawd/core`'s config validation, even
+though `hashPassphrase` itself needs neither.)
 
 (Run from the repo root after `npm install && npm run build` so the
 workspace packages are built.) Also set `ADMIN_SESSION_SECRET` to a random
