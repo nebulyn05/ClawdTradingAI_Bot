@@ -1,18 +1,20 @@
-import { createPublicClient, http } from "viem";
+import { createPublicClient } from "viem";
 import { networkForChain, createLogger } from "@clawd/core";
 import { withDecryptedKey } from "@clawd/wallet";
 import type { ChainAdapter, Unsubscribe } from "../types.js";
 import { evmConfig, type EvmChain } from "./config.js";
+import { createEvmTransport } from "./transport.js";
 import { watchEvmNewPairs, watchEvmWallet } from "./watch.js";
 import { getUniswapV2Quote, executeUniswapV2Swap } from "./uniswap-v2.js";
 import { getOneInchQuote, executeOneInchSwap } from "./oneinch.js";
 import { withdrawNative } from "./transfer.js";
+import { getErc20Balance, transferErc20 } from "./token-transfer.js";
 
 const log = createLogger("chains:evm:adapter");
 
 export function createEvmAdapter(chain: EvmChain): ChainAdapter {
   const cfg = evmConfig(chain);
-  const client = createPublicClient({ chain: cfg.viemChain, transport: http(cfg.rpcUrl) });
+  const client = createPublicClient({ chain: cfg.viemChain, transport: createEvmTransport(chain) });
 
   return {
     chain,
@@ -57,6 +59,16 @@ export function createEvmAdapter(chain: EvmChain): ChainAdapter {
     async withdraw(encryptedKey, toAddress, amount) {
       return withDecryptedKey(encryptedKey, (rawKey) =>
         withdrawNative(chain, rawKey, toAddress, amount),
+      );
+    },
+
+    async getTokenBalance(tokenAddress, walletAddress) {
+      return getErc20Balance(chain, tokenAddress, walletAddress);
+    },
+
+    async transferToken(encryptedKey, tokenAddress, toAddress, amount) {
+      return withDecryptedKey(encryptedKey, (rawKey) =>
+        transferErc20(chain, rawKey, tokenAddress, toAddress, amount),
       );
     },
   };

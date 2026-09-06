@@ -7,6 +7,7 @@ import { watchPumpFunLaunches } from "./pumpfun.js";
 import { watchSolanaWallet } from "./watch-wallet.js";
 import { getJupiterQuote, executeJupiterSwap } from "./jupiter.js";
 import { withdrawSol } from "./transfer.js";
+import { getSplTokenBalance, transferSplToken } from "./token-transfer.js";
 
 export function createSolanaAdapter(): ChainAdapter {
   const chain: Chain = "solana";
@@ -42,6 +43,16 @@ export function createSolanaAdapter(): ChainAdapter {
     async withdraw(encryptedKey, toAddress, amount) {
       return withDecryptedKey(encryptedKey, (rawKey) =>
         withdrawSol(conn(), rawKey, toAddress, amount),
+      );
+    },
+
+    async getTokenBalance(tokenAddress, walletAddress) {
+      return getSplTokenBalance(conn(), tokenAddress, walletAddress);
+    },
+
+    async transferToken(encryptedKey, tokenAddress, toAddress, amount) {
+      return withDecryptedKey(encryptedKey, (rawKey) =>
+        transferSplToken(conn(), rawKey, tokenAddress, toAddress, amount),
       );
     },
   };

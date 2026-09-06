@@ -1,6 +1,6 @@
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, type VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
-import { loadConfig, createLogger } from "@clawd/core";
+import { loadConfig, createLogger, getNumberSetting } from "@clawd/core";
 
 const log = createLogger("chains:solana:jito");
 
@@ -36,13 +36,14 @@ export async function submitViaJitoBundle(
 ): Promise<string> {
   const cfg = loadConfig();
   const tipAccount = pickTipAccount(cfg.JITO_TIP_ACCOUNTS);
+  const tipLamports = await getNumberSetting("JITO_TIP_LAMPORTS", cfg.JITO_TIP_LAMPORTS);
 
   const { blockhash } = await connection.getLatestBlockhash();
   const tipTx = new Transaction({ recentBlockhash: blockhash, feePayer: keypair.publicKey }).add(
     SystemProgram.transfer({
       fromPubkey: keypair.publicKey,
       toPubkey: tipAccount,
-      lamports: cfg.JITO_TIP_LAMPORTS,
+      lamports: tipLamports,
     }),
   );
   tipTx.sign(keypair);

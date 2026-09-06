@@ -164,4 +164,21 @@ export interface DomainEvents {
     tokenAddress: string;
     reasons: string[];
   };
+  "router.exposureCapRejected": {
+    userId: string;
+    chain: Chain;
+    tokenAddress: string;
+    reason: string;
+  };
+  /** Platform-level issue an operator should see — circuit-breaker trips, Guard accuracy drift. Sent to TELEGRAM_ADMIN_CHAT_ID if configured (see apps/bot/src/notifications.ts). */
+  "admin.alert": {
+    source: "circuit_breaker" | "guard_drift";
+    message: string;
+  };
+
+  /** Keep-alive pinger lifecycle events (for monitoring/debugging). */
+  "keepAlive.started": { urls: string[]; intervalMs: number };
+  "keepAlive.stopped": Record<string, never>;
+  "keepAlive.failures": { failedUrls: string[] };
+  "keepAlive.tick": { total: number; failed: number; failedUrls: string[] };
 }

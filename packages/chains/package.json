@@ -13,6 +13,7 @@
   "dependencies": {
     "@clawd/core": "*",
     "@clawd/wallet": "*",
+    "@solana/spl-token": "^0.4.15",
     "@solana/web3.js": "^1.95.3",
     "bs58": "^6.0.0",
     "viem": "^2.21.19"

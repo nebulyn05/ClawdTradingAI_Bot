@@ -7,6 +7,7 @@
     { "path": "packages/chains" },
     { "path": "packages/pricing" },
     { "path": "packages/ai" },
+    { "path": "packages/backtest" },
     { "path": "packages/specialists/guard" },
     { "path": "packages/specialists/sniper" },
     { "path": "packages/specialists/router" },

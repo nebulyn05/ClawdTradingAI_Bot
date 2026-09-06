@@ -1,12 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { loadConfig } from "@clawd/core";
+import { loadConfig, getBooleanSetting } from "@clawd/core";
 
 let client: Anthropic | undefined;
 
-/** Whether AI features should run at all — both the feature flag and a key must be present. */
-export function isAiEnabled(): boolean {
+/**
+ * Whether AI features should run at all — both the feature flag and a key
+ * must be present. The flag itself is live-toggleable from the admin
+ * dashboard (Setting override), same pattern as SNIPER_ENABLED/
+ * SCOUT_ENABLED; the API key is boot-time only (a live process can't safely
+ * pick up a brand-new secret without restarting the Anthropic client).
+ */
+export async function isAiEnabled(): Promise<boolean> {
   const cfg = loadConfig();
-  return cfg.AI_FEATURES_ENABLED && Boolean(cfg.ANTHROPIC_API_KEY);
+  const enabled = await getBooleanSetting("AI_FEATURES_ENABLED", cfg.AI_FEATURES_ENABLED);
+  return enabled && Boolean(cfg.ANTHROPIC_API_KEY);
 }
 
 function getClient(): Anthropic {

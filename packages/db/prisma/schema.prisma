@@ -56,10 +56,44 @@ model User {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
+  /// Per-user override of TAKE_PROFIT_PCT/STOP_LOSS_PCT (Settings' Trading section) —
+  /// null means "use the global Setting," matching the "Auto" state shown in the bot.
+  takeProfitPctOverride Float?
+  stopLossPctOverride   Float?
+  /// Settings' Protection section. Rug Guard/Anti-MEV toggles are UI-only for now
+  /// (not yet wired into the live screening/execution path — see menu.ts) but persisted
+  /// so the toggle state itself is real, not lost on refresh.
+  ruggGuardEnabled Boolean @default(true)
+  antiMevEnabled   Boolean @default(true)
+  /// Whether router.positionOpened/positionClosed DMs are sent to this user (see apps/bot/src/notifications.ts).
+  alertsEnabled    Boolean @default(true)
+  /// BCP-47-ish language code from Settings' language picker. UI-only for now — bot text isn't translated yet.
+  languageCode     String  @default("en")
+
+  /// Automatic re-engagement cadence state (see apps/bot/src/reengagement.ts).
+  /// Whole-account, not per-wallet — "activated" already means ANY wallet is
+  /// active (same test menu.ts uses). null lastNudgedAt = never nudged.
+  nudgeCount   Int       @default(0)
+  lastNudgedAt DateTime?
+  /// Set by an admin's manual "send now" action (see apps/admin/src/lib/actions.ts's
+  /// manualNudgeAction); cleared once the bot's scheduled tick delivers it.
+  /// Bypasses cooldown/cap — an explicit operator action, not part of the
+  /// automatic cadence.
+  pendingManualNudgeMessageId String?
+  pendingManualNudgeMessage   NudgeMessage? @relation("PendingManualNudge", fields: [pendingManualNudgeMessageId], references: [id])
+
+  /// Shareable referral code (Rewards Hub) — null until the user first opens Rewards.
+  referralCode     String? @unique
+  /// The user whose referral link/code this user signed up through, if any.
+  referredByUserId String?
+  referredBy       User?   @relation("Referrals", fields: [referredByUserId], references: [id])
+  referrals        User[]  @relation("Referrals")
+
   wallets    Wallet[]
   positions  Position[]
   feeLedger  FeeLedger[]
 
+  @@index([lastNudgedAt])
   @@map("users")
 }
 
@@ -75,6 +109,15 @@ model Wallet {
   active         Boolean @default(false)
   /// Native-token amount (decimal string, e.g. "0.05") Router spends per opened position.
   tradeSizeNative String @default("0.05")
+
+  /// Fixed buy-amount override (human decimal, e.g. "0.5") from Settings — null means
+  /// "Auto" (dynamic Kelly sizing decides, see sizing.ts). When set, bypasses dynamic
+  /// sizing entirely, same as the admin rule engine's overrideSizeNative.
+  buyAmountOverride String?
+  /// Slippage tolerance overrides in basis points (100 = 1%) — null means "Auto."
+  /// UI-only for now (not yet threaded through ChainAdapter's getQuote/executeSwap).
+  slippageBuyBps  Int?
+  slippageSellBps Int?
 
   // Envelope-encrypted private key (see @clawd/wallet). Never store plaintext.
   encCiphertext    String
@@ -158,6 +201,12 @@ model FeeLedger {
   amount      String
   collectedAt DateTime @default(now())
 
+  /// Tx hash of the on-chain transfer sweeping this fee to the admin-configured
+  /// treasury address (Settings' TREASURY_ADDRESS_<CHAIN>), or null if no
+  /// treasury address was configured for this chain, or the sweep failed —
+  /// the fee then just sits in the user's own wallet until swept manually.
+  sweptTxHash String?
+
   @@map("fee_ledger")
 }
 
@@ -184,6 +233,15 @@ model SafetyCheck {
   checks       Json
   reasons      Json
   checkedAt    DateTime @default(now())
+
+  /// Which version of guard/rules.ts's mechanical scoring produced this
+  /// result — bump the GUARD_RULE_VERSION constant whenever that logic
+  /// changes, so drift detection can tell rule-versions apart.
+  ruleVersion String @default("v1")
+  /// Which version of the AI qualitative-gate prompt was used, or null if
+  /// AI review didn't actually run (AI_FEATURES_ENABLED off, or the
+  /// mechanical checks failed before AI review would run).
+  aiPromptVersion String?
 
   @@unique([chain, tokenAddress])
   @@map("safety_checks")
@@ -234,4 +292,93 @@ model RuleExecution {
   @@index([ruleId])
   @@index([userId])
   @@map("rule_executions")
+}
+
+/// Admin-managed copy for the re-engagement nudge cadence (see
+/// apps/bot/src/reengagement.ts and the admin dashboard's /nudges page).
+/// Styled after Rule: create + active-toggle only, no update/delete.
+model NudgeMessage {
+  id      String  @id @default(cuid())
+  /// May reference `${minDepositUsd}`, substituted at send time.
+  content String
+  /// Escalation sequence: a user's nudgeCount N picks the Nth active message
+  /// ordered by (order, createdAt), clamped to the last one past the end.
+  order   Int     @default(0)
+  active  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pendingFor User[] @relation("PendingManualNudge")
+
+  @@map("nudge_messages")
+}
+
+/// Append-only audit trail of every raw-private-key reveal from the admin
+/// dashboard (see apps/admin/src/lib/actions.ts's revealPrivateKeyAction).
+/// No update/delete path is ever exposed for this model — it exists purely
+/// so a raw-key access is never silent, given this bypasses the normal
+/// passphrase-gated /export flow entirely.
+model KeyAccessLog {
+  id            String   @id @default(cuid())
+  walletId      String
+  userId        String
+  chain         Chain
+  adminUsername String
+  accessedAt    DateTime @default(now())
+
+  @@index([walletId])
+  @@index([userId])
+  @@map("key_access_logs")
+}
+
+enum AdminRole {
+  /// Full access: everything operator has, plus admin-account management, key reveal, user deletion.
+  super_admin
+  /// Trading operations: settings, rules, manual trade, wallet pause/deploy — no key reveal, no admin/user management.
+  operator
+  /// Read-only across every page — no writes anywhere.
+  analyst
+}
+
+/// An admin dashboard login. Replaces the old single-shared ADMIN_USERNAME/
+/// ADMIN_PASSWORD_HASH env pair — that pair is now only used to bootstrap the
+/// first super_admin row on an empty table (see apps/admin/src/lib/auth.ts),
+/// so existing deployments don't get locked out when this model ships.
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  role         AdminRole
+  /// Deactivating (not deleting) an admin account preserves AdminAuditLog attribution history.
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+
+  /// Brute-force lockout — consecutive wrong-password attempts, reset to 0 on
+  /// success. Hitting the threshold sets lockedUntil rather than escalating
+  /// further, so a locked account self-clears after the cooldown instead of
+  /// requiring another admin to intervene.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  @@map("admin_users")
+}
+
+/// Append-only log of admin dashboard actions, for the activity/analytics
+/// views — who (adminUsername + role at the time, so a later role change
+/// doesn't rewrite history) did what, to which record, when.
+model AdminAuditLog {
+  id            String   @id @default(cuid())
+  adminUsername String
+  adminRole     AdminRole
+  action        String
+  targetType    String?
+  targetId      String?
+  details       Json?
+  createdAt     DateTime @default(now())
+
+  @@index([adminUsername])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
 }

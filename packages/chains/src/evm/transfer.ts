@@ -1,7 +1,8 @@
-import { createPublicClient, createWalletClient, http } from "viem";
+import { createPublicClient, createWalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { TxResult } from "@clawd/core";
 import { evmConfig, type EvmChain } from "./config.js";
+import { createEvmTransport } from "./transport.js";
 
 /** Sends `amount` wei of the chain's native token from the given key to `toAddress`. */
 export async function withdrawNative(
@@ -12,11 +13,11 @@ export async function withdrawNative(
 ): Promise<TxResult> {
   const cfg = evmConfig(chain);
   const account = privateKeyToAccount(rawPrivateKeyHex as `0x${string}`);
-  const publicClient = createPublicClient({ chain: cfg.viemChain, transport: http(cfg.rpcUrl) });
+  const publicClient = createPublicClient({ chain: cfg.viemChain, transport: createEvmTransport(chain) });
   const walletClient = createWalletClient({
     account,
     chain: cfg.viemChain,
-    transport: http(cfg.rpcUrl),
+    transport: createEvmTransport(chain),
   });
 
   const hash = await walletClient.sendTransaction({

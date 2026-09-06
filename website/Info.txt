@@ -1,0 +1,15 @@
+npm run serve:website (serve website -l 8080) to package.json
+
+This directory is a full mirror of the live site (https://clawdagents.bot),
+re-fetched and repaired on 2026-07-31: wget's --convert-links mangled a
+handful of Next.js responsive <img srcSet> attributes (naive string
+substitution inside a comma-separated attribute value), and several images
+only existed as cached /_next/image?url=...&w=...&q=75 optimizer variants
+(no live Next server here to resize on request) — both were fixed by
+stripping the corrupted srcSet attributes and materializing the real image
+paths (docs/, process/, Cryptologos/) from the largest cached variant.
+Structure now matches the live site's own Next.js static-export layout
+(_next/static/chunks, _next/static/media, docs/, legal/) rather than the
+previous hand-organized css/js/images/fonts/media folders — don't rename
+these to fit that old convention, the HTML's asset references are wired to
+these exact paths.

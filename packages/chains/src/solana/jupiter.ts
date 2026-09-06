@@ -1,6 +1,6 @@
 import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
-import { loadConfig, networkForChain } from "@clawd/core";
+import { loadConfig, networkForChain, getBooleanSetting } from "@clawd/core";
 import type { Quote, TxResult } from "@clawd/core";
 import { submitViaJitoBundle } from "./jito.js";
 
@@ -69,8 +69,9 @@ export async function executeJupiterSwap(
   tx.sign([keypair]);
 
   const cfg = loadConfig();
+  const jitoEnabled = await getBooleanSetting("JITO_ENABLED", cfg.JITO_ENABLED);
   const signature =
-    cfg.JITO_ENABLED && networkForChain("solana") === "mainnet"
+    jitoEnabled && networkForChain("solana") === "mainnet"
       ? await submitViaJitoBundle(connection, keypair, tx)
       : await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
   const confirmation = await connection.confirmTransaction(signature, "confirmed");

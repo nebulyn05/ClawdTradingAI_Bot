@@ -1,10 +1,15 @@
 import { getDb } from "@clawd/db";
-import { loadConfig, eventBus, createLogger, getNumberSetting, type ExitReason } from "@clawd/core";
+import { loadConfig, eventBus, createLogger, getNumberSetting, getSetting, type Chain, type ExitReason } from "@clawd/core";
 import { getChainAdapter, nativeQuoteAddress } from "@clawd/chains";
 import { computeFeeRaw } from "./tp-sl.js";
 import { toEncryptedKey } from "./wallet-key.js";
 
 const log = createLogger("router:close");
+
+/** Admin-configured treasury address for this chain (Settings' TREASURY_ADDRESS_<CHAIN>), or null if unset. */
+async function getTreasuryAddress(chain: Chain): Promise<string | null> {
+  return getSetting(`TREASURY_ADDRESS_${chain.toUpperCase()}`);
+}
 
 /**
  * Closes an open position by selling its full token size back to the native
@@ -62,17 +67,45 @@ export async function closePosition(positionId: string, reason: ExitReason) {
       },
     });
 
+    let feeLedgerId: string | null = null;
     if (profitable && feeRaw > 0n) {
-      await tx.feeLedger.create({
+      const feeLedgerEntry = await tx.feeLedger.create({
         data: { userId: position.userId, tradeId: trade.id, chain: position.chain, amount: feeRaw.toString() },
       });
+      feeLedgerId = feeLedgerEntry.id;
     }
 
-    return tx.position.update({
+    const updatedPosition = await tx.position.update({
       where: { id: positionId },
       data: { status: "closed", exitPrice, exitReason: reason, closedAt: new Date() },
     });
+
+    return { updatedPosition, feeLedgerId };
   });
+
+  // Sweep the fee to the admin's configured treasury address, right after the
+  // close transaction commits — a real on-chain transfer out of the user's own
+  // wallet, not just a ledger entry. Best-effort: no treasury address configured,
+  // or the transfer itself failing (insufficient gas headroom, RPC error), must
+  // never undo or block the position close that already succeeded above.
+  if (updated.feeLedgerId) {
+    const treasuryAddress = await getTreasuryAddress(position.chain);
+    if (treasuryAddress) {
+      try {
+        const sweepResult = await adapter.withdraw(toEncryptedKey(position.wallet), treasuryAddress, feeRaw);
+        if (sweepResult.status === "confirmed") {
+          await db.feeLedger.update({
+            where: { id: updated.feeLedgerId },
+            data: { sweptTxHash: sweepResult.txHash },
+          });
+        } else {
+          log.warn({ positionId, txHash: sweepResult.txHash }, "Fee sweep transaction did not confirm");
+        }
+      } catch (err) {
+        log.warn({ positionId, err }, "Fee sweep to treasury address failed — fee stays in user's wallet");
+      }
+    }
+  }
 
   eventBus.emit("router.positionClosed", {
     userId: position.userId,
@@ -87,5 +120,5 @@ export async function closePosition(positionId: string, reason: ExitReason) {
   });
 
   log.info({ positionId, reason, profitable, profitRaw: profitRaw.toString() }, "Position closed");
-  return updated;
+  return updated.updatedPosition;
 }

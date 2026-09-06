@@ -3,6 +3,14 @@ import type { EvmTokenSecurity, SolanaTokenSecurity } from "./goplus.js";
 export const MIN_LIQUIDITY_USD = 1000;
 export const PASS_THRESHOLD = 60;
 
+/**
+ * Bump this whenever the mechanical scoring logic below changes (a new
+ * check, a different threshold/weight) — SafetyCheck rows persist whichever
+ * version produced them, so drift-detection (drift.ts) can tell which
+ * rule-version's accuracy it's actually looking at.
+ */
+export const GUARD_RULE_VERSION = "v1";
+
 export interface ScoreResult {
   checks: Record<string, boolean>;
   reasons: string[];

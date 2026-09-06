@@ -11,3 +11,5 @@ export {
   formatNativeAmount,
   parseNativeAmount,
 } from "./native.js";
+export { formatTokenAmount, parseTokenAmount } from "./token-amount.js";
+export { getRecentTransactions, type TxHistoryEntry, type TxHistoryResult } from "./tx-history.js";

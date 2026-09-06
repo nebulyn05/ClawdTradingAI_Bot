@@ -1,0 +1,172 @@
+# Render Infrastructure as Code for Clawd Agents
+# Deploy with: render deploy --config render.yaml
+# Or push to a connected GitHub repo with this file at the root
+
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # MANAGED DATABASES (created first, referenced by services)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - type: pserv
+    name: clawd-postgres
+    plan: starter  # or standard/pro for production
+    region: oregon  # change to your preferred region
+    databases:
+      - name: clawd_agents
+        databaseName: clawd_agents
+        user: clawd
+    # Note: Render auto-generates DATABASE_URL as an env var for services that link to this
+
+  - type: redis
+    name: clawd-redis
+    plan: starter  # or standard/pro for production
+    region: oregon  # must match postgres region for private networking
+    # Note: Render auto-generates REDIS_URL as an env var for services that link to this
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # BACKGROUND WORKERS (long-running Node processes, no HTTP port)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - type: worker
+    name: clawd-bot
+    region: oregon
+    plan: starter  # background workers can use starter plan
+    runtime: node
+    repo: https://github.com/nebulyn05/ClawdTradingAI_Bot
+    branch: main
+    rootDir: .
+    buildCommand: ./build-render.sh
+    startCommand: node apps/bot/dist/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+    # Link to managed services (auto-injects DATABASE_URL, REDIS_URL)
+    # These are set via the Render dashboard "Environment" tab or via envVar references
+    # See: https://render.com/docs/environment-variables#referencing-other-services
+
+  - type: worker
+    name: clawd-worker
+    region: oregon
+    plan: starter
+    runtime: node
+    repo: https://github.com/nebulyn05/ClawdTradingAI_Bot
+    branch: main
+    rootDir: .
+    buildCommand: ./build-render.sh
+    startCommand: node apps/worker/dist/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Keep-alive URLs for Render free tier web services
+      # These reference the web service URLs (available after first deploy)
+      - key: RENDER_ADMIN_URL
+        value: https://clawd-admin.onrender.com
+      - key: RENDER_WEBSITE_URL
+        value: https://clawd-website.onrender.com
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # WEB SERVICES (Next.js apps with HTTP servers)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - type: web
+    name: clawd-admin
+    region: oregon
+    plan: starter  # upgrade to standard for production (no sleep, more resources)
+    runtime: node
+    repo: https://github.com/nebulyn05/ClawdTradingAI_Bot
+    branch: main
+    rootDir: .
+    buildCommand: ./build-render.sh
+    startCommand: cd apps/admin && npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # The worker uses this to know its own URL for keep-alive (set after first deploy)
+      - key: RENDER_ADMIN_URL
+        value: https://clawd-admin.onrender.com
+    # Auto-scaling (optional, for production)
+    # autoScale:
+    #   minInstances: 1
+    #   maxInstances: 3
+    #   targetCPUPercent: 70
+
+  - type: web
+    name: clawd-website
+    region: oregon
+    plan: starter  # free tier works for static-ish marketing site
+    runtime: node
+    repo: https://github.com/nebulyn05/ClawdTradingAI_Bot
+    branch: main
+    rootDir: .
+    buildCommand: ./build-render.sh
+    startCommand: cd apps/website && npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # The worker uses this to know its own URL for keep-alive (set after first deploy)
+      - key: RENDER_WEBSITE_URL
+        value: https://clawd-website.onrender.com
+
+# ──────────────────────────────────────────────────────────────────────────
+# ENVIRONMENT VARIABLE GROUPS (defined once, referenced by services)
+# ──────────────────────────────────────────────────────────────────────────
+
+# In Render Dashboard > Environment > Environment Groups, create:
+# 1. "clawd-core" - Core config (MASTER_ENCRYPTION_KEY, ADMIN_SESSION_SECRET, etc.)
+# 2. "clawd-telegram" - TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_CHAT_ID
+# 3. "clawd-chains" - All RPC URLs, API keys (HELIUS, ALCHEMY, etc.)
+# 4. "clawd-ai" - AI_FEATURES_ENABLED, ANTHROPIC_API_KEY
+# 5. "clawd-features" - Feature flags, intervals, thresholds
+#
+# Then attach groups to services:
+# - clawd-bot: clawd-core, clawd-telegram, clawd-chains, clawd-ai, clawd-features
+# - clawd-worker: clawd-core, clawd-chains, clawd-ai, clawd-features
+# - clawd-admin: clawd-core, clawd-chains (for live balance checks)
+# - clawd-website: (none needed - no backend deps)
+
+# ──────────────────────────────────────────────────────────────────────────
+# NOTES
+# ──────────────────────────────────────────────────────────────────────────
+#
+# 1. Replace nebulyn05 with your actual GitHub username/org
+#
+# 2. Required Environment Variables (set in Render Dashboard > Environment Groups):
+#    - MASTER_ENCRYPTION_KEY (64 hex chars): node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#    - ADMIN_SESSION_SECRET (64 hex chars): node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#    - TELEGRAM_BOT_TOKEN (from @BotFather)
+#    - TELEGRAM_ADMIN_CHAT_ID (optional, for alerts)
+#    - HELIUS_API_KEY (for Solana RPC)
+#    - ALCHEMY_API_KEY or QUICKNODE_* URLs (for EVM RPCs)
+#    - BIRDEYE_API_KEY, LIFI_API_KEY, ETHERSCAN_API_KEY (optional but recommended)
+#    - AI_FEATURES_ENABLED=true, ANTHROPIC_API_KEY (if using AI features)
+#    - TWITTER_BEARER_TOKEN, KOL_TWITTER_HANDLES (if using Scout Twitter tracking)
+#    - FEE_TREASURY_SOLANA_ADDRESS, FEE_TREASURY_EVM_ADDRESS (for fee sweeps)
+#    - All _NETWORK vars (testnet/mainnet per chain)
+#
+# 3. Free Tier Limitations:
+#    - Web services spin down after 15 min of inactivity (cold start ~30-60s)
+#    - Background workers do NOT spin down on free tier
+#    - Starter plan ($7/mo) prevents spin-down for web services
+#
+# 4. Health Checks:
+#    - Add /api/health endpoints to apps/admin and apps/website (see below)
+#    - Render expects 2xx response within 30s
+#
+# 5. Private Networking:
+#    - All services in same region (oregon) can communicate via private IPs
+#    - DATABASE_URL and REDIS_URL auto-inject private connection strings
+#
+# 6. Deploy Order:
+#    - Databases create first
+#    - Workers and web services deploy in parallel
+#    - First deploy takes ~10-15 min (npm ci + build)

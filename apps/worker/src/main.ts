@@ -4,6 +4,7 @@ import {
   createLogger,
   startPublishingToRedis,
   getBooleanSetting,
+  startKeepAlive,
   type Chain,
   type SignalSource,
 } from "@clawd/core";
@@ -11,8 +12,14 @@ import { getDb } from "@clawd/db";
 import { startSniper } from "@clawd/sniper";
 import { startScout, startKolTracking } from "@clawd/scout";
 import { startArbiter } from "@clawd/arbiter";
-import { getOrScreenToken } from "@clawd/guard";
-import { openPosition, startPositionMonitor, startAiTpSlReview, startRuleEngine } from "@clawd/router";
+import { getOrScreenToken, startDriftDetection } from "@clawd/guard";
+import {
+  openPosition,
+  startPositionMonitor,
+  startAiTpSlReview,
+  startRuleEngine,
+  startDrawdownCheck,
+} from "@clawd/router";
 
 const log = createLogger("worker:main");
 
@@ -65,6 +72,21 @@ async function main() {
   const cfg = loadConfig();
   log.info("Starting Clawd Agents worker (Sniper/Scout -> Guard -> Router, Arbiter detection)");
 
+  // Keep-alive for Render free tier web services (admin + website)
+  // Uses RENDER_ADMIN_URL and RENDER_WEBSITE_URL env vars (set in Render dashboard)
+  const adminUrl = process.env.RENDER_ADMIN_URL;
+  const websiteUrl = process.env.RENDER_WEBSITE_URL;
+  const keepAliveUrls = [adminUrl, websiteUrl].filter((u): u is string => Boolean(u));
+  if (keepAliveUrls.length > 0) {
+    startKeepAlive({
+      urls: keepAliveUrls.map((u) => `${u}/api/health`),
+      intervalMs: 10 * 60 * 1000, // 10 minutes
+      verbose: false,
+    });
+  } else {
+    log.info("No RENDER_ADMIN_URL/RENDER_WEBSITE_URL set — keep-alive disabled");
+  }
+
   wireEventBus();
   const stopSniper = startSniper();
   const stopScout = await startScout();
@@ -75,12 +97,18 @@ async function main() {
   const stopAiTpSl = startAiTpSlReview(cfg.AI_TP_SL_REVIEW_INTERVAL_MS);
   // Admin-dashboard-defined conditional triggers (e.g. "profit above X -> buy Y").
   const stopRuleEngine = startRuleEngine(cfg.RULE_ENGINE_INTERVAL_MS);
+  // Rolling accuracy of Guard's own past decisions vs. what actually happened.
+  const stopDriftDetection = startDriftDetection(cfg.GUARD_DRIFT_CHECK_INTERVAL_MS);
+  // Trips TRADING_PAUSED (new trades only) on a realized-P&L drawdown breach.
+  const stopDrawdownCheck = startDrawdownCheck(cfg.DRAWDOWN_CHECK_INTERVAL_MS);
   // The bot runs in a separate process — bridge the events it needs for
   // user-facing notifications out over Redis (see @clawd/core/redis-bridge).
   const stopPublishing = startPublishingToRedis([
     "router.positionOpened",
     "router.positionClosed",
     "guard.rejected",
+    "router.exposureCapRejected",
+    "admin.alert",
   ]);
 
   const shutdown = () => {
@@ -92,6 +120,8 @@ async function main() {
     stopMonitor();
     stopAiTpSl();
     stopRuleEngine();
+    stopDriftDetection();
+    stopDrawdownCheck();
     stopPublishing();
     process.exit(0);
   };

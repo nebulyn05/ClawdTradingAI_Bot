@@ -1,16 +1,14 @@
+import { InlineKeyboard } from "grammy";
 import type { Conversation } from "@grammyjs/conversations";
-import type { Chain } from "@clawd/core";
+import { loadConfig } from "@clawd/core";
 import type { BotContext } from "../types.js";
 import {
-  SUPPORTED_CHAINS,
   hasExportPassphrase,
   setExportPassphrase,
   checkExportPassphrase,
-  exportWalletKey,
+  exportAllWalletKeys,
   listWallets,
 } from "../wallet-service.js";
-
-const REVEAL_TTL_SECONDS = 60;
 
 export async function exportKeyConversation(
   conversation: Conversation<BotContext>,
@@ -56,24 +54,30 @@ export async function exportKeyConversation(
     await ctx.reply("You don't have any wallets yet. Run /start first.");
     return;
   }
-  await ctx.reply(`Which chain? Reply with one of: ${wallets.map((w) => w.chain).join(", ")}`);
-  const chainMsg = await conversation.waitFor("message:text");
-  const chain = chainMsg.message.text.trim().toLowerCase() as Chain;
-  if (!SUPPORTED_CHAINS.includes(chain) || !wallets.some((w) => w.chain === chain)) {
-    await ctx.reply("You don't have a wallet for that chain.");
-    return;
-  }
 
-  const rawKey = await conversation.external(() => exportWalletKey(userId, chain));
+  const { evm, solana } = await conversation.external(() => exportAllWalletKeys(userId));
+  const cfg = await conversation.external(() => loadConfig());
+  const ttlSeconds = cfg.KEY_REVEAL_AUTO_DELETE_SECONDS;
+
+  const keyLines = [
+    evm ? `EVM Private Key:\n${evm}` : null,
+    solana ? `SOL Private Key:\n${solana}` : null,
+  ].filter((l): l is string => l !== null);
+
   const sent = await ctx.reply(
-    `Raw private key for your ${chain} wallet:\n\n${rawKey}\n\n` +
-      `This message will be deleted in ${REVEAL_TTL_SECONDS}s — copy it now and store it somewhere safe.`,
+    `🔐 Your Private Keys\n\n${keyLines.join("\n\n")}\n\n` +
+      "⚠️ This gives FULL access to all your funds.\n" +
+      "🚫 DELETE THIS MESSAGE immediately after copying.\n" +
+      "🚨 Never share with anyone, including support.\n\n" +
+      `Auto-deletes in ${Math.round(ttlSeconds / 60)} minutes.`,
+    { reply_markup: new InlineKeyboard().text("🗑️ Delete this message", "onboarding:delete_keys") },
   );
 
-  // Fire-and-forget: only cleans up if the bot process stays alive for the TTL window.
+  // Fire-and-forget: only cleans up if the bot process stays alive for the TTL window. The
+  // message also has a manual "delete now" button (handled in menu.ts) for early cleanup.
   conversation.external(() => {
     setTimeout(() => {
       ctx.api.deleteMessage(sent.chat.id, sent.message_id).catch(() => {});
-    }, REVEAL_TTL_SECONDS * 1000);
+    }, ttlSeconds * 1000);
   });
 }

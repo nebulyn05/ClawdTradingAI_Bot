@@ -29,7 +29,7 @@ export async function reviewTpSlWithAi(
   safetyScore: number,
   openForMs: number,
 ): Promise<AiTpSlReview | null> {
-  if (!isAiEnabled()) return null;
+  if (!(await isAiEnabled())) return null;
 
   const userMessage =
     `Chain: ${chain}\nEntry price: ${entryPrice}\nCurrent price: ${currentPrice}\n` +

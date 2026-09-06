@@ -1,0 +1,95 @@
+One-time setup:
+npm install                    # installs all workspaces (including the new apps/website)
+docker compose up -d           # local Postgres + Redis
+npm run db:generate            # prisma generate
+npm run db:migrate             # applies migrations
+npm run build                  # tsc -b across packages/bot/worker, so apps/admin can resolve @clawd/* imports
+
+Running the pieces (each is its own process — run in separate terminals, or backgrounded):
+npm run dev:bot                # Telegram bot
+npm run dev:worker             # trading pipeline (Guard/Router/etc.)
+npm run dev:admin              # admin dashboard — http://localhost:3000 (Next.js default port)
+npm run dev:website            # marketing site — http://localhost:8080
+
+Notes:
+dev:bot and dev:worker need your .env filled in (Telegram bot token, RPC URLs, MASTER_ENCRYPTION_KEY, DATABASE_URL, REDIS_URL at minimum — see .env.example).
+dev:admin needs npm run build done first (it imports the compiled output of @clawd/core/@clawd/db/etc., not source).
+dev:website has zero backend dependencies (no DB, no .env needed) — safe to run on its own anytime.
+You don't need all four running to work on any one of them — dev:website in particular is fully independent.
+npm run serve:website still exists if you ever want to compare against the old static snapshot, but that's reference-only now.
+
+========================================================================================================================================================================
+
+Render API = rnd_hEvISDVyZ2dH69asjogK2yneRJEA
+
+curl -s \
+  -H "Authorization: Bearer rnd_hEvISDVyZ2dH69asjogK2yneRJEA" \
+  https://api.render.com/v1/owners
+
+curl -s \
+  -H "Authorization: Bearer rnd_hEvISDVyZ2dH69asjogK2yneRJEA" \
+  "https://api.render.com/v1/services?limit=100" | jq '.[] | .service | {
+    id,
+    name,
+    type,
+    plan,
+    region,
+    rootDir
+  }'
+
+curl -i \
+  -H "Authorization: Bearer rnd_hEvISDVyZ2dH69asjogK2yneRJEA" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  https://api.render.com/v1/services \
+  -d '{
+    "type": "web_service",
+    "name": "clawd-admin-test",
+    "ownerId": "tea-d34ogobe5dus739qehjg",
+    "repo": "https://github.com/nebulyn05/ClawdTradingAI_Bot",
+    "branch": "main",
+    "rootDir": "apps/admin",
+    "plan": "free",
+    "region": "oregon",
+    "serviceDetails": {
+      "env": "node",
+      "envSpecificDetails": {
+        "buildCommand": "npm install && npm run build",
+        "startCommand": "npm run start"
+      },
+      "runtime": "node"
+    }
+  }'
+
+curl -s -H "Authorization: Bearer rnd_hEvISDVyZ2dH69asjogK2yneRJEA" -X POST https://api.render.com/v1/postgres -d '{
+  "name": "clawd-postgres",
+  "databaseName": "clawd_agents",
+  "user": "clawd",
+  "region": "oregon",
+  "plan": "free",
+  "ownerId": "tea-d34ogobe5dus739qehjg",
+  "version": "16"
+}' | head -100
+
+curl -s -H "Authorization: Bearer rnd_hEvISDVyZ2dH69asjogK2yneRJEA" -X POST https://api.render.com/v1/redis -d '{
+  "name": "clawd-redis",
+  "region": "oregon",
+  "plan": "free",
+  "ownerId": "tea-d34ogobe5dus739qehjg",
+  "version": "7"
+}' | head -100
+
+=========================================================================================================================================================================
+You need to do these, since they need either a browser/faucet or your own credentials:
+
+Restart your two already-running npm run dev:worker terminals. --env-file only loads once at process start, so those are still running on the old .env from before I added the factory addresses — they need a restart to pick up Ethereum/BSC Sniper.
+Fund the wallet with Sepolia ETH: send some to 0x7f18aD8ba62fE8FC9c5df79eF7E841D23C371055 via any Sepolia faucet (Google Cloud's or Alchemy's Sepolia faucets both work without needing mainnet ETH elsewhere). A small amount (0.02–0.05 ETH) is plenty for gas + a tiny test swap.
+Get a test token address: open Uniswap's Sepolia app pools list on GeckoTerminal in your browser (I kept hitting 403s scripting this) and copy any WETH-paired token's contract address — liquidity is thin/random since it's a testnet, so it genuinely doesn't matter which one.
+Start the admin dashboard: npm run dev:admin, log in with your admin credentials, go to Manual Trade, select user V3nom0, chain Ethereum, paste the token address from step 3, small size like 0.01, submit.
+Watch the worker terminal and the admin Positions page after submitting — you'll see either a router.positionOpened event or a Guard rejection log, which either way confirms the pipeline (Guard → Router → real Sepolia swap) is actually wired end-to-end.
+
+Ping me with whatever shows up (position opened, Guard rejection, or an error) and I'll debug from there.
+
+
+user: gzspyjfr_user
+db/pass: gzspyjfr_clawd

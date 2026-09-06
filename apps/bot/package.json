@@ -6,7 +6,7 @@
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
     "start": "node dist/main.js"
   },
   "dependencies": {
@@ -14,6 +14,7 @@
     "@clawd/db": "*",
     "@clawd/wallet": "*",
     "@clawd/chains": "*",
+    "@clawd/pricing": "*",
     "grammy": "^1.30.0",
     "@grammyjs/conversations": "^1.2.0"
   },

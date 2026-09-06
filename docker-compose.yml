@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: clawd
       POSTGRES_DB: clawd_agents
     ports:
-      - "5432:5432"
+      # Host port 5434 (not 5432) — this host already has an unrelated
+      # Postgres container bound to 5432.
+      - "5434:5432"
     volumes:
       - clawd_postgres_data:/var/lib/postgresql/data
 
@@ -15,7 +17,9 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      # Host port 6380 (not 6379) — this host already has an unrelated
+      # Redis container bound to 6379.
+      - "6380:6379"
     volumes:
       - clawd_redis_data:/data
 

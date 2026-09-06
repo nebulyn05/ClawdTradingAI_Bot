@@ -6,6 +6,7 @@ export * from "./birdeye.js";
 export * from "./dexscreener.js";
 export * from "./pyth.js";
 export * from "./chainlink.js";
+export * from "./native-price.js";
 
 /**
  * Best-effort unified USD price lookup: tries Birdeye for Solana (when

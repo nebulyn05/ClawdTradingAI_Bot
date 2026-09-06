@@ -11,6 +11,15 @@ interface SessionPayload {
 
 function sign(payload: string): string {
   const { ADMIN_SESSION_SECRET } = loadConfig();
+  // A blank/short secret would still "work" (HMAC accepts any key) but makes
+  // every session cookie forgeable by anyone who notices it's unset — fail
+  // loudly at first use instead of silently signing with a weak key.
+  if (ADMIN_SESSION_SECRET.length < 32) {
+    throw new Error(
+      "ADMIN_SESSION_SECRET is unset or too short (needs 32+ chars) — admin sessions cannot be signed securely. " +
+        "Set a long random value in .env before logging in.",
+    );
+  }
   return createHmac("sha256", ADMIN_SESSION_SECRET).update(payload).digest("hex");
 }
 

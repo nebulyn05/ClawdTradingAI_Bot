@@ -38,4 +38,10 @@ export interface ChainAdapter {
 
   /** Sends `amount` of the native token from the wallet behind `encryptedKey` to `toAddress`. */
   withdraw(encryptedKey: EncryptedKey, toAddress: string, amount: bigint): Promise<TxResult>;
+
+  /** Balance + decimals for an arbitrary token (ERC20 contract address / SPL mint address) at `walletAddress`. */
+  getTokenBalance(tokenAddress: string, walletAddress: string): Promise<{ balance: bigint; decimals: number }>;
+
+  /** Sends `amount` (already in the token's smallest unit) of an arbitrary token from the wallet behind `encryptedKey` to `toAddress`. */
+  transferToken(encryptedKey: EncryptedKey, tokenAddress: string, toAddress: string, amount: bigint): Promise<TxResult>;
 }

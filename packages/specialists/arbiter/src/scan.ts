@@ -1,4 +1,4 @@
-import { eventBus, loadConfig, createLogger, type Chain, type ArbitrageOpportunity } from "@clawd/core";
+import { eventBus, loadConfig, createLogger, getNumberSetting, type Chain, type ArbitrageOpportunity } from "@clawd/core";
 import { getChainAdapter } from "@clawd/chains";
 import { getTokenPriceUsd } from "@clawd/pricing";
 import { ARB_ASSETS } from "./assets.js";
@@ -25,6 +25,11 @@ const log = createLogger("arbiter");
  */
 export async function scanForArbitrage(chains?: Chain[]): Promise<ArbitrageOpportunity[]> {
   const cfg = loadConfig();
+  const [assumedBridgeCostPct, minSpreadPct, quoteSize] = await Promise.all([
+    getNumberSetting("ARBITER_ASSUMED_BRIDGE_COST_PCT", cfg.ARBITER_ASSUMED_BRIDGE_COST_PCT),
+    getNumberSetting("ARBITER_MIN_SPREAD_PCT", cfg.ARBITER_MIN_SPREAD_PCT),
+    getNumberSetting("ARBITER_QUOTE_SIZE", cfg.ARBITER_QUOTE_SIZE),
+  ]);
   const opportunities: ArbitrageOpportunity[] = [];
 
   for (const asset of ARB_ASSETS) {
@@ -45,22 +50,18 @@ export async function scanForArbitrage(chains?: Chain[]): Promise<ArbitrageOppor
       if (price !== null) prices[chain] = price;
     }
 
-    const preFiltered = findSpreadCandidates(
-      prices,
-      cfg.ARBITER_ASSUMED_BRIDGE_COST_PCT,
-      cfg.ARBITER_MIN_SPREAD_PCT,
-    );
+    const preFiltered = findSpreadCandidates(prices, assumedBridgeCostPct, minSpreadPct);
 
-    const quoteAmountRaw = BigInt(Math.round(cfg.ARBITER_QUOTE_SIZE * 10 ** asset.decimals));
+    const quoteAmountRaw = BigInt(Math.round(quoteSize * 10 ** asset.decimals));
 
     for (const c of preFiltered) {
       const buyAddress = asset.addresses[c.buyChain];
       const realCostPct = buyAddress
         ? await getLifiBridgeCostPct(c.buyChain, c.sellChain, buyAddress, quoteAmountRaw)
         : null;
-      const bridgeCostPct = realCostPct ?? cfg.ARBITER_ASSUMED_BRIDGE_COST_PCT;
+      const bridgeCostPct = realCostPct ?? assumedBridgeCostPct;
 
-      if (c.spreadPct <= bridgeCostPct + cfg.ARBITER_MIN_SPREAD_PCT) continue;
+      if (c.spreadPct <= bridgeCostPct + minSpreadPct) continue;
 
       const opportunity: ArbitrageOpportunity = {
         asset: asset.symbol,

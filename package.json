@@ -13,17 +13,20 @@
     "dev:bot": "npm run dev --workspace=apps/bot",
     "dev:worker": "npm run dev --workspace=apps/worker",
     "dev:admin": "npm run dev --workspace=apps/admin",
+    "dev:website": "npm run dev --workspace=apps/website",
     "test": "vitest run",
     "lint": "tsc -b --pretty",
     "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma",
-    "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma"
+    "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma",
+    "serve:website": "serve website -l 8080"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.4",
+    "@types/node": "^22.7.5",
     "prisma": "^5.21.1",
+    "serve": "^14.2.6",
     "tsx": "^4.19.1",
-    "@types/node": "^22.7.5"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
   },
   "engines": {
     "node": ">=20"

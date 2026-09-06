@@ -21,6 +21,46 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),
 
   TELEGRAM_BOT_TOKEN: z.string().optional().default(""),
+  // Chat the bot DMs platform-level alerts to (circuit-breaker trips, Guard
+  // accuracy drift) — see apps/bot/src/notifications.ts. A group/channel id
+  // (negative, e.g. "-1002402221199") or a user id. Optional — alerts are
+  // just skipped (with a log line) if unset.
+  TELEGRAM_ADMIN_CHAT_ID: z.string().optional().default(""),
+
+  // Bot onboarding (apps/bot/src/conversations/onboarding.ts) — minimum
+  // portfolio USD value (apps/bot/src/portfolio.ts) required before the
+  // "Activate" button will turn a user's wallets on. Setting-overridable
+  // like the other risk-management thresholds.
+  MIN_DEPOSIT_USD: z.coerce.number().min(0).default(100),
+  // How long the one-time private-key-reveal message at wallet creation
+  // stays up before auto-deleting (the user can also delete it early via
+  // its "Saved. Delete now." button). Same mechanism as /export's reveal.
+  KEY_REVEAL_AUTO_DELETE_SECONDS: z.coerce.number().int().min(10).default(300),
+  // Links shown on the bot's "Support" menu screen — left blank by default;
+  // the screen just says "not configured yet" until these are set. Never
+  // fabricate these.
+  BOT_WEBSITE_URL: z.string().optional().default(""),
+  BOT_DOCS_URL: z.string().optional().default(""),
+  BOT_CHANNEL_URL: z.string().optional().default(""),
+  BOT_SUPPORT_URL: z.string().optional().default(""),
+  // Fallback destination for the bot's Support button when BOT_SUPPORT_URL
+  // isn't set — e.g. a t.me link to the operator's own account.
+  BOT_ADMIN_TELEGRAM_URL: z.string().optional().default(""),
+  // URL to a hosted video/GIF the bot attaches above every message it sends
+  // (as the message's media, with the text as its caption). Optional — no
+  // behavior change (plain text messages) until an admin sets this.
+  BOT_AD_MEDIA_URL: z.string().optional().default(""),
+
+  // Re-engagement nudges (apps/bot/src/reengagement.ts) for onboarded users
+  // who never activated a wallet. The check interval is startup-only, like
+  // the other *_INTERVAL_MS values; the per-user 24h/5-max cadence is
+  // enforced against User.lastNudgedAt/nudgeCount, not by this interval
+  // directly — it's kept short so an admin's manual "send now" (queued via
+  // User.pendingManualNudgeMessageId) delivers promptly.
+  NUDGE_CHECK_INTERVAL_MS: z.coerce.number().int().min(60_000).default(5 * 60_000),
+  NUDGE_COOLDOWN_HOURS: z.coerce.number().min(1).default(24),
+  NUDGE_MAX_COUNT: z.coerce.number().int().min(0).default(5),
+  NUDGE_MESSAGES_ENABLED: boolFromString(true),
 
   MASTER_ENCRYPTION_KEY: z
     .string()
@@ -40,6 +80,12 @@ const envSchema = z.object({
   HELIUS_API_KEY: z.string().optional().default(""),
   SOLANA_DEVNET_RPC_URL: z.string().default("https://api.devnet.solana.com"),
   SOLANA_MAINNET_RPC_URL: z.string().optional().default(""),
+  // Comma-separated secondary RPC endpoints — a request that fails against
+  // the primary above retries against these, in order, before failing the
+  // whole call (see packages/chains/src/rpc-failover.ts). Optional; no
+  // failover happens if left empty.
+  SOLANA_DEVNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  SOLANA_MAINNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
   JUPITER_API_BASE: z.string().default("https://quote-api.jup.ag/v6"),
 
   ALCHEMY_API_KEY: z.string().optional().default(""),
@@ -53,6 +99,21 @@ const envSchema = z.object({
   BSC_MAINNET_RPC_URL: z.string().optional().default(""),
   BASE_TESTNET_RPC_URL: z.string().default("https://base-sepolia-rpc.publicnode.com"),
   BASE_MAINNET_RPC_URL: z.string().optional().default(""),
+
+  // Comma-separated secondary RPC endpoints per chain/network — a request
+  // that fails against the primary retries against these, in order, before
+  // failing the whole call (see packages/chains/src/evm/transport.ts).
+  // Optional; no failover happens if left empty.
+  ETHEREUM_TESTNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  ETHEREUM_MAINNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  BSC_TESTNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  BSC_MAINNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  BASE_TESTNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  BASE_MAINNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  MONAD_TESTNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  MONAD_MAINNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  ROBINHOOD_TESTNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
+  ROBINHOOD_MAINNET_RPC_FALLBACK_URLS: z.string().optional().default(""),
 
   // Websocket RPC overrides for Sniper/Scout's live subscriptions (PairCreated,
   // Transfer logs, blocks). If unset, derived automatically from the http(s)
@@ -134,14 +195,61 @@ const envSchema = z.object({
 
   LIFI_API_KEY: z.string().optional().default(""),
 
+  // Etherscan's V2 multichain API (one key, `chainid` query param selects
+  // ethereum/bsc/base) — used by the admin dashboard's on-chain wallet
+  // transaction history, display-only. Unset means that feature reports
+  // "unsupported" rather than a fabricated empty history. Monad and
+  // Robinhood Chain have no known Etherscan-compatible explorer, so they
+  // report "unsupported" regardless of this key (see tx-history.ts).
+  ETHERSCAN_API_KEY: z.string().optional().default(""),
+
   PROFIT_FEE_RATE: z.coerce.number().min(0).max(1).default(0.02),
   FEE_TREASURY_SOLANA_ADDRESS: z.string().optional().default(""),
   FEE_TREASURY_EVM_ADDRESS: z.string().optional().default(""),
 
+  // Rewards Hub (bot menu.ts) — advertised cashback/referral commission
+  // rates. Zero by default: no accrual ledger exists yet (balances always
+  // show real $0, never fabricated), and the rate itself is a business
+  // decision for the operator to set via the admin dashboard, not something
+  // to guess from a competitor's marketing copy.
+  CASHBACK_RATE_PCT: z.coerce.number().min(0).max(1).default(0),
+  REFERRAL_COMMISSION_PCT: z.coerce.number().min(0).max(1).default(0),
+
   TAKE_PROFIT_PCT: z.coerce.number().min(0).default(0.5),
   STOP_LOSS_PCT: z.coerce.number().min(0).max(1).default(0.2),
   MAX_CONCURRENT_POSITIONS_PER_CHAIN: z.coerce.number().int().min(1).default(3),
+  // Portfolio-level exposure cap: a new position is rejected if it would push
+  // (existing open-position value + the new position) above this fraction of
+  // the user's total portfolio value on that chain (open positions +
+  // uninvested balance). See router/src/exposure.ts.
+  MAX_PORTFOLIO_EXPOSURE_PCT: z.coerce.number().min(0).max(1).default(0.6),
+  // Dynamic position sizing (fractional Kelly) — see router/src/sizing.ts.
+  // 0.25 = quarter-Kelly, the conservative fraction most retail Kelly-sizing
+  // guides land on (full Kelly is high-variance against noisy win-rate
+  // estimates from a small trade sample).
+  KELLY_FRACTION: z.coerce.number().min(0).max(1).default(0.25),
+  // Hard per-trade ceiling regardless of what Kelly sizing computes, as a
+  // fraction of the wallet's available (uninvested) balance.
+  MAX_POSITION_SIZE_PCT: z.coerce.number().min(0).max(1).default(0.2),
   POSITION_MONITOR_INTERVAL_MS: z.coerce.number().int().min(1000).default(15_000),
+
+  // Circuit breaker — see router/src/circuit-breaker.ts and
+  // drawdown-check.ts. Trips a global TRADING_PAUSED Setting (new trades
+  // only; open positions still get monitored/closed normally) when realized
+  // P&L on any chain has drawn down more than the threshold within the
+  // rolling window. Only ever set to true automatically — clearing it back
+  // to false is a deliberate admin-dashboard action (see settings page).
+  DRAWDOWN_WINDOW_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60_000),
+  DRAWDOWN_THRESHOLD_PCT: z.coerce.number().min(0).default(0.3),
+  DRAWDOWN_CHECK_INTERVAL_MS: z.coerce.number().int().min(60_000).default(5 * 60_000),
+
+  // Guard drift detection — see packages/specialists/guard/src/drift.ts and
+  // drift-report.ts. Alert threshold and rolling-window size are tunable
+  // live via the admin dashboard (Setting overrides); the check interval is
+  // startup-only config, like the other *_INTERVAL_MS values below.
+  GUARD_DRIFT_CHECK_INTERVAL_MS: z.coerce.number().int().min(60_000).default(30 * 60_000),
+  GUARD_DRIFT_ALERT_THRESHOLD_PCT: z.coerce.number().min(0).max(1).default(0.15),
+  GUARD_DRIFT_ROLLING_WINDOW_SIZE: z.coerce.number().int().min(1).default(50),
 
   ARBITER_SCAN_INTERVAL_MS: z.coerce.number().int().min(1000).default(30_000),
   // Placeholder until a verified LI.FI (or similar) bridge-quote integration

@@ -1,7 +1,6 @@
 import {
   createPublicClient,
   createWalletClient,
-  http,
   type PublicClient,
   type WalletClient,
   type Account,
@@ -9,6 +8,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import type { Quote, TxResult } from "@clawd/core";
 import { evmConfig, type EvmChain } from "./config.js";
+import { createEvmTransport } from "./transport.js";
 import { ROUTER_V2_ABI, ERC20_ABI, NATIVE_TOKEN_ADDRESS } from "./abis.js";
 import { getSubmitTransport } from "./submit-client.js";
 
@@ -40,7 +40,7 @@ export async function getUniswapV2Quote(
   amountIn: bigint,
 ): Promise<Quote> {
   const { cfg, router, wrappedNative } = requireRouter(chain);
-  const client = createPublicClient({ chain: cfg.viemChain, transport: http(cfg.rpcUrl) });
+  const client = createPublicClient({ chain: cfg.viemChain, transport: createEvmTransport(chain) });
   const path = buildPath(tokenIn, tokenOut, wrappedNative);
 
   const amounts = (await client.readContract({
@@ -99,11 +99,11 @@ export async function executeUniswapV2Swap(
 ): Promise<TxResult> {
   const { cfg, router } = requireRouter(chain);
   const account = privateKeyToAccount(rawPrivateKeyHex as `0x${string}`);
-  const publicClient = createPublicClient({ chain: cfg.viemChain, transport: http(cfg.rpcUrl) });
+  const publicClient = createPublicClient({ chain: cfg.viemChain, transport: createEvmTransport(chain) });
   const walletClient = createWalletClient({
     account,
     chain: cfg.viemChain,
-    transport: getSubmitTransport(chain),
+    transport: await getSubmitTransport(chain),
   });
 
   const path = (quote.raw as { path: `0x${string}`[] }).path;

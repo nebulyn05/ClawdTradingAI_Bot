@@ -12,12 +12,15 @@ import {
   type Chain as ViemChain,
 } from "viem/chains";
 import { loadConfig, networkForChain, type Chain } from "@clawd/core";
+import { parseRpcUrlList } from "../rpc-failover.js";
 
 export type EvmChain = "ethereum" | "bsc" | "base" | "monad" | "robinhood";
 
 interface EvmChainConfig {
   viemChain: ViemChain;
   rpcUrl: string;
+  /** Secondary RPC endpoints tried in order if the primary fails (see evm/transport.ts). Empty when no failover is configured. */
+  fallbackRpcUrls: string[];
   /** Websocket RPC for live subscriptions (PairCreated/Transfer logs, blocks). */
   wsUrl: string;
   /** Uniswap-V2-style factory (emits PairCreated) used by Sniper to detect new pools. */
@@ -54,6 +57,10 @@ function resolved(envValue: string, mainnetDefault: string | undefined, network:
   return undefined;
 }
 
+function fallbackUrlsFor(mainnetCsv: string, testnetCsv: string, network: string): string[] {
+  return parseRpcUrlList(network === "mainnet" ? mainnetCsv : testnetCsv);
+}
+
 /** Derives a wss:// URL from an http(s) one (works for Alchemy/QuickNode) unless overridden. */
 function wsFor(override: string, httpUrl: string): string {
   if (override) return override;
@@ -75,6 +82,11 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       return {
         viemChain: network === "mainnet" ? mainnet : sepolia,
         rpcUrl,
+        fallbackRpcUrls: fallbackUrlsFor(
+          cfg.ETHEREUM_MAINNET_RPC_FALLBACK_URLS,
+          cfg.ETHEREUM_TESTNET_RPC_FALLBACK_URLS,
+          network,
+        ),
         wsUrl: wsFor(
           network === "mainnet" ? cfg.ETHEREUM_MAINNET_WS_URL : cfg.ETHEREUM_TESTNET_WS_URL,
           rpcUrl,
@@ -93,6 +105,11 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       return {
         viemChain: network === "mainnet" ? bsc : bscTestnet,
         rpcUrl,
+        fallbackRpcUrls: fallbackUrlsFor(
+          cfg.BSC_MAINNET_RPC_FALLBACK_URLS,
+          cfg.BSC_TESTNET_RPC_FALLBACK_URLS,
+          network,
+        ),
         wsUrl: wsFor(network === "mainnet" ? cfg.BSC_MAINNET_WS_URL : cfg.BSC_TESTNET_WS_URL, rpcUrl),
         factoryAddress: resolved(cfg.BSC_FACTORY_ADDRESS, PANCAKESWAP_V2_MAINNET.factory, network),
         routerAddress: resolved(cfg.BSC_ROUTER_ADDRESS, PANCAKESWAP_V2_MAINNET.router, network),
@@ -108,6 +125,11 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       return {
         viemChain: network === "mainnet" ? base : baseSepolia,
         rpcUrl,
+        fallbackRpcUrls: fallbackUrlsFor(
+          cfg.BASE_MAINNET_RPC_FALLBACK_URLS,
+          cfg.BASE_TESTNET_RPC_FALLBACK_URLS,
+          network,
+        ),
         wsUrl: wsFor(network === "mainnet" ? cfg.BASE_MAINNET_WS_URL : cfg.BASE_TESTNET_WS_URL, rpcUrl),
         factoryAddress: resolved(cfg.BASE_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.BASE_ROUTER_ADDRESS, undefined, network),
@@ -126,6 +148,11 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       return {
         viemChain,
         rpcUrl,
+        fallbackRpcUrls: fallbackUrlsFor(
+          cfg.MONAD_MAINNET_RPC_FALLBACK_URLS,
+          cfg.MONAD_TESTNET_RPC_FALLBACK_URLS,
+          network,
+        ),
         wsUrl: wsFor(
           network === "mainnet" ? cfg.MONAD_MAINNET_WS_URL : cfg.MONAD_TESTNET_WS_URL,
           rpcUrl,
@@ -144,6 +171,11 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       return {
         viemChain,
         rpcUrl,
+        fallbackRpcUrls: fallbackUrlsFor(
+          cfg.ROBINHOOD_MAINNET_RPC_FALLBACK_URLS,
+          cfg.ROBINHOOD_TESTNET_RPC_FALLBACK_URLS,
+          network,
+        ),
         wsUrl: wsFor(
           network === "mainnet" ? cfg.ROBINHOOD_MAINNET_WS_URL : cfg.ROBINHOOD_TESTNET_WS_URL,
           rpcUrl,

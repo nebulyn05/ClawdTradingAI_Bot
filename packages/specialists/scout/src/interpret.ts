@@ -18,7 +18,7 @@ If there's no contract address in the tweet, contractAddress must be null. Convi
 
 /** LLM interpretation of one tweet's text. Returns null when AI is disabled, or on any failure. */
 export async function interpretTweet(text: string): Promise<TweetInterpretation | null> {
-  if (!isAiEnabled()) return null;
+  if (!(await isAiEnabled())) return null;
   try {
     const response = await askClaude(SYSTEM_PROMPT, text, 200);
     const parsed = extractJson<TweetInterpretation>(response);

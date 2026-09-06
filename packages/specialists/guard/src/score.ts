@@ -2,9 +2,9 @@ import { eventBus, createLogger, type Chain, type SafetyCheckResult } from "@cla
 import { getDb } from "@clawd/db";
 import { getBestPair } from "@clawd/pricing";
 import { isEvmChain } from "@clawd/chains";
-import { reviewTokenWithAi } from "@clawd/ai";
+import { reviewTokenWithAi, isAiEnabled, AI_GUARD_PROMPT_VERSION } from "@clawd/ai";
 import { getEvmTokenSecurity, getSolanaTokenSecurity, GOPLUS_EVM_CHAIN_IDS } from "./goplus.js";
-import { computeSolanaScore, computeEvmScore, type ScoreResult } from "./rules.js";
+import { computeSolanaScore, computeEvmScore, GUARD_RULE_VERSION, type ScoreResult } from "./rules.js";
 
 const log = createLogger("guard:score");
 
@@ -39,6 +39,11 @@ export async function screenToken(chain: Chain, tokenAddress: string): Promise<S
     scored = { checks: {}, reasons: [`No Guard rules defined for chain "${chain}"`], score: 0, passed: false };
   }
 
+  // Captured before the AI-gate block below can flip `scored`, so the
+  // persisted aiPromptVersion reflects whether the real model was actually
+  // called — not just whether the (possibly disabled-AI stub) review ran.
+  const aiRan = scored.passed && (await isAiEnabled());
+
   if (scored.passed) {
     const preliminary: SafetyCheckResult = { chain, tokenAddress, checkedAt: Date.now(), ...scored };
     const aiReview = await reviewTokenWithAi(chain, tokenAddress, preliminary);
@@ -51,10 +56,18 @@ export async function screenToken(chain: Chain, tokenAddress: string): Promise<S
   }
 
   const result: SafetyCheckResult = { chain, tokenAddress, checkedAt: Date.now(), ...scored };
+  const aiPromptVersion = aiRan ? AI_GUARD_PROMPT_VERSION : null;
 
   await getDb().safetyCheck.upsert({
     where: { chain_tokenAddress: { chain, tokenAddress } },
-    update: { passed: scored.passed, score: scored.score, checks: scored.checks, reasons: scored.reasons },
+    update: {
+      passed: scored.passed,
+      score: scored.score,
+      checks: scored.checks,
+      reasons: scored.reasons,
+      ruleVersion: GUARD_RULE_VERSION,
+      aiPromptVersion,
+    },
     create: {
       chain,
       tokenAddress,
@@ -62,6 +75,8 @@ export async function screenToken(chain: Chain, tokenAddress: string): Promise<S
       score: scored.score,
       checks: scored.checks,
       reasons: scored.reasons,
+      ruleVersion: GUARD_RULE_VERSION,
+      aiPromptVersion,
     },
   });
 

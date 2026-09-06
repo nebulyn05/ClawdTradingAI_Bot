@@ -1,0 +1,126 @@
+HOW THE TRADING WORKER WORKS
+=============================
+
+OVERVIEW
+--------
+The worker is the automated engine that finds trading opportunities, checks
+them for safety, executes trades, and manages open positions until they're
+closed. It runs continuously in the background, with every chain currently
+defaulting to testnet (no real funds at risk until deliberately switched to
+mainnet).
+
+STEP 1: FINDING OPPORTUNITIES
+------------------------------
+Three independent signal sources watch the market simultaneously:
+
+- Sniper - watches each blockchain in real time for brand-new token
+  launches / trading pairs the moment they appear.
+- Scout (wallet tracking) - watches known "smart money" wallets; if one of
+  them buys a token, that's a signal.
+- Scout (social tracking) - monitors a configured list of Twitter/X
+  accounts (KOLs) for token calls, using AI to judge whether a tweet is
+  actually calling a token rather than just mentioning one.
+- Arbiter - separately scans for the same asset trading at different
+  prices across chains. This one is detection-only right now - it logs
+  opportunities but doesn't automatically execute a buy-bridge-sell
+  sequence yet.
+
+STEP 2: SAFETY SCREENING ("GUARD")
+------------------------------------
+Every candidate token goes through two layers before any money is risked:
+
+Mechanical checks (rules-based, no AI): Is there enough liquidity? Can the
+token creator mint unlimited new supply or freeze holders' tokens? Is it a
+honeypot (can be bought but not sold)? Is ownership concentrated in a few
+wallets? Is the sell tax unreasonably high? Each issue subtracts points
+from a 100-point score; it needs to score 60+ to pass.
+
+AI review (final gate, optional): if the mechanical checks pass, AI is
+shown the results and asked to catch anything they'd miss - like a token
+name impersonating a known project. It defaults to approving unless it
+finds something concrete, and if the AI call fails, it defaults to
+rejecting rather than silently letting the trade through.
+
+STEP 3: RISK CHECKS BEFORE BUYING
+------------------------------------
+Even after Guard approves a token, three more checks run:
+
+1. Circuit breaker - if a chain's realized losses have exceeded a set
+   threshold recently, new trades on that chain pause automatically
+   (existing positions are still managed normally). This never
+   auto-resumes - a human has to turn it back on.
+2. Exposure cap - rejects a trade if it would push a user's total exposure
+   on that chain above a set percentage of their overall portfolio value.
+3. Position sizing - calculates how much to bet based on that signal
+   source's historical win rate (once enough trade history exists); starts
+   conservative/flat-sized until there's real data to learn from.
+
+If all checks pass, the trade executes and the position is recorded with
+an automatic take-profit and stop-loss target.
+
+STEP 4: MANAGING THE POSITION (SELLING)
+------------------------------------------
+Every open position is re-checked on a short interval:
+
+1. Safety re-check first - if a token that was safe at purchase now fails
+   the safety screen (e.g. liquidity was pulled, it looks like a rug), the
+   position is sold immediately regardless of price.
+2. Price target check - otherwise, if the price has hit the take-profit or
+   stop-loss level, it sells.
+
+Separately, on a much slower interval, AI can re-evaluate and adjust the
+take-profit/stop-loss percentages on positions that are still open -
+widening targets on strong momentum, tightening the stop-loss if the
+token's safety score has degraded. If this fails or is turned off, the
+position simply keeps its existing targets - nothing breaks.
+
+THE APIS IT USES, AND WHAT EACH ONE IS FOR
+---------------------------------------------
+
+Blockchain access:
+- Helius - Solana network access: reads balances, submits transactions,
+  and feeds real-time detection of new token launches.
+- Alchemy / QuickNode - the equivalent for the Ethereum/BSC/Base networks.
+
+Executing trades:
+- Jupiter - finds the best swap route and executes trades on Solana.
+- Jito (optional) - bundles a Solana trade with a small tip so it can't be
+  front-run by bots watching the network.
+- 1inch - finds the best swap route and executes trades on
+  Ethereum/BSC/Base.
+- Flashbots (optional, Ethereum only) - submits trades privately so they
+  can't be front-run.
+
+Prices:
+- Birdeye - primary price source for Solana tokens.
+- DexScreener - backup price source for any chain, picks the most liquid
+  trading pool for a token.
+- Pyth - price feed used specifically for the value of each chain's native
+  currency (SOL, ETH, BNB).
+
+Safety screening:
+- GoPlus - free token-security data: mint/freeze authority, honeypot
+  detection, holder concentration, sell tax, and more, for both Solana and
+  EVM-based tokens.
+
+Cross-chain:
+- LI.FI - gets real bridge quotes across chains, used to detect and price
+  cross-chain arbitrage opportunities.
+
+Social signal:
+- X (Twitter) API - pulls tweets from the configured list of accounts
+  being tracked for token calls.
+
+AI:
+- Anthropic (Claude) - used for three specific jobs: judging whether a
+  tweet is a genuine token call, a final safety sanity-check after the
+  mechanical rules pass, and periodically tuning take-profit/stop-loss
+  targets on open positions. AI never decides when to buy or sell on its
+  own - those triggers are deterministic (a score threshold, a price
+  level, a loss threshold); AI only shapes some of the inputs to those
+  rules.
+
+Note: two data sources exist in the system's toolkit but aren't actively
+used yet - a Chainlink price feed integration (built but not currently
+called anywhere) and Etherscan (used only for a read-only transaction
+history view in the admin dashboard, not for any trading decision).

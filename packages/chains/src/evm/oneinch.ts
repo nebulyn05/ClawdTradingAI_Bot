@@ -1,8 +1,9 @@
 import { loadConfig, networkForChain, createLogger, type Quote, type TxResult } from "@clawd/core";
-import { createPublicClient, createWalletClient, http } from "viem";
+import { createPublicClient, createWalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { EvmChain } from "./config.js";
 import { evmConfig } from "./config.js";
+import { createEvmTransport } from "./transport.js";
 import { getSubmitTransport } from "./submit-client.js";
 
 const log = createLogger("chains:evm:oneinch");
@@ -98,11 +99,11 @@ export async function executeOneInchSwap(
     const data = (await res.json()) as OneInchSwapResponse;
     if (!data.tx) return null;
 
-    const publicClient = createPublicClient({ chain: evm.viemChain, transport: http(evm.rpcUrl) });
+    const publicClient = createPublicClient({ chain: evm.viemChain, transport: createEvmTransport(chain) });
     const walletClient = createWalletClient({
       account,
       chain: evm.viemChain,
-      transport: getSubmitTransport(chain),
+      transport: await getSubmitTransport(chain),
     });
 
     const hash = await walletClient.sendTransaction({

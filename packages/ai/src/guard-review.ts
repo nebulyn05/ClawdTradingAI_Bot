@@ -4,6 +4,13 @@ import { extractJson } from "./json.js";
 
 const log = createLogger("ai:guard-review");
 
+/**
+ * Bump this whenever SYSTEM_PROMPT below changes — SafetyCheck rows persist
+ * whichever version reviewed them, so drift-detection (guard/src/drift.ts)
+ * can tell which prompt-version's accuracy it's actually looking at.
+ */
+export const AI_GUARD_PROMPT_VERSION = "v1";
+
 export interface AiRiskReview {
   approved: boolean;
   confidence: number;
@@ -30,7 +37,7 @@ export async function reviewTokenWithAi(
   tokenAddress: string,
   mechanicalResult: SafetyCheckResult,
 ): Promise<AiRiskReview> {
-  if (!isAiEnabled()) {
+  if (!(await isAiEnabled())) {
     return {
       approved: true,
       confidence: 1,

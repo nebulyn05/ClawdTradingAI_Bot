@@ -8,15 +8,18 @@
 
 body {
   background: #0a0710;
+  background-image: radial-gradient(circle at 15% -10%, rgba(139, 92, 246, 0.08), transparent 40%);
+  background-attachment: fixed;
   color: #e8e4f0;
 }
 
 .card {
-  @apply rounded-xl border border-border bg-panel p-5;
+  @apply rounded-xl border border-border bg-panel p-5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_8px_24px_-16px_rgba(0,0,0,0.6)];
 }
 
 .stat-value {
-  @apply text-2xl font-semibold tabular-nums;
+  /* Proportional figures, not tabular-nums, on a large standalone value — tabular-nums is reserved for table/axis columns that must align vertically. */
+  @apply text-2xl font-semibold tracking-tight;
 }
 
 .stat-label {
@@ -24,23 +27,23 @@ body {
 }
 
 .btn {
-  @apply rounded-lg px-3 py-1.5 text-sm font-medium transition-colors;
+  @apply rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .btn-primary {
-  @apply bg-accent text-white hover:bg-accent/90;
+  @apply bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.15)_inset] hover:bg-accent/90;
 }
 
 .btn-secondary {
-  @apply bg-white/10 text-white hover:bg-white/20;
+  @apply bg-white/10 text-white hover:bg-white/[0.16];
 }
 
 .btn-danger {
-  @apply bg-red-500/20 text-red-300 hover:bg-red-500/30;
+  @apply bg-red-500/15 text-red-300 hover:bg-red-500/25;
 }
 
 .input {
-  @apply w-full rounded-lg border border-border bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent;
+  @apply w-full rounded-lg border border-border bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none transition-colors focus:border-accent;
 }
 
 table.data-table {
@@ -52,5 +55,9 @@ table.data-table th {
 }
 
 table.data-table td {
-  @apply border-b border-border/50 px-3 py-2;
+  @apply border-b border-border/50 px-3 py-2 tabular-nums;
+}
+
+table.data-table tbody tr {
+  @apply transition-colors hover:bg-white/[0.03];
 }

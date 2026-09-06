@@ -5,15 +5,23 @@ import { listWallets, withdrawFromWallet, formatNativeAmount } from "../wallet-s
 
 export async function withdrawConversation(conversation: Conversation<BotContext>, ctx: BotContext) {
   const userId = ctx.userId;
+  const presetChain = ctx.session.transferChain;
+  ctx.session.transferChain = undefined;
+
   const wallets = await conversation.external(() => listWallets(userId));
   if (wallets.length === 0) {
     await ctx.reply("You don't have any wallets yet. Run /start first.");
     return;
   }
 
-  await ctx.reply(`Which chain? Reply with one of: ${wallets.map((w) => w.chain).join(", ")}`);
-  const chainMsg = await conversation.waitFor("message:text");
-  const chain = chainMsg.message.text.trim().toLowerCase() as Chain;
+  let chain: Chain;
+  if (presetChain) {
+    chain = presetChain;
+  } else {
+    await ctx.reply(`Which chain? Reply with one of: ${wallets.map((w) => w.chain).join(", ")}`);
+    const chainMsg = await conversation.waitFor("message:text");
+    chain = chainMsg.message.text.trim().toLowerCase() as Chain;
+  }
   const wallet = wallets.find((w) => w.chain === chain);
   if (!wallet) {
     await ctx.reply("You don't have a wallet for that chain.");

@@ -28,7 +28,10 @@ export async function getPythPrice(symbol: keyof typeof PYTH_PRICE_IDS): Promise
 
   try {
     const url = `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${priceId}`;
-    const res = await fetch(url);
+    // Without an explicit timeout, an unreachable/slow host hangs on the OS-level
+    // TCP timeout (can be 60s+) — long enough that a Telegram callback query
+    // answering it expires before the call ever resolves. Fail fast instead.
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     const data = (await res.json()) as HermesResponse;
     const entry = data.parsed?.[0];
