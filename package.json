@@ -9,7 +9,7 @@
     "packages/specialists/*"
   ],
   "scripts": {
-    "build": "npm run db:generate && tsc -b",
+    "build": "npm run db:generate && npx prisma db push --schema packages/db/prisma/schema.prisma && tsc -b",
     "start": "npm run start --workspace=apps/bot",
     "dev:bot": "npm run dev --workspace=apps/bot",
     "dev:worker": "npm run dev --workspace=apps/worker",
