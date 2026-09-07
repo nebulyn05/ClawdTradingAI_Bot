@@ -15,6 +15,9 @@ find . -name "*.tsbuildinfo" -delete
 echo "🗄️ Generating Prisma Client..."
 npm run db:generate
 
+echo "🗄️ Initializing PostgreSQL database..."
+npx prisma db push --schema packages/db/prisma/schema.prisma
+
 echo "🔨 Building TypeScript project references..."
 npx tsc -b --pretty
 
