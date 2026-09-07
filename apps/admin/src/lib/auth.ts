@@ -19,7 +19,7 @@ export { hasRole, type AdminRole, type AdminSession };
  * pair configured doesn't get locked out when this table ships. Every login
  * after that goes through AdminUser, not the env pair.
  */
-async function ensureBootstrapAdmin(): Promise<void> {
+/*async function ensureBootstrapAdmin(): Promise<void> {
   const db = getDb();
   const count = await db.adminUser.count();
   if (count > 0) return;
@@ -27,6 +27,88 @@ async function ensureBootstrapAdmin(): Promise<void> {
   if (!cfg.ADMIN_USERNAME || !cfg.ADMIN_PASSWORD_HASH) return;
   await db.adminUser.create({
     data: { username: cfg.ADMIN_USERNAME, passwordHash: cfg.ADMIN_PASSWORD_HASH, role: "super_admin" },
+  });
+}*/
+
+async function ensureBootstrapAdmin(): Promise<void> {
+  const db = getDb();
+
+  /*
+   * TEMPORARY ONE-TIME ADMIN PASSWORD RESET.
+   *
+   * Remove this block after successfully logging in and remove
+   * ADMIN_RESET_PASSWORD from Render.
+   */
+  const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+
+  if (resetPassword) {
+    const resetCompleted = await db.setting.findUnique({
+      where: { key: "TEMP_ADMIN_PASSWORD_RESET_COMPLETED" },
+    });
+
+    if (!resetCompleted) {
+      try {
+        await db.$transaction(async (tx) => {
+          // Create the marker first. Because Setting.key is unique,
+          // only one concurrent request can win this reset.
+          await tx.setting.create({
+            data: {
+              key: "TEMP_ADMIN_PASSWORD_RESET_COMPLETED",
+              value: new Date().toISOString(),
+            },
+          });
+
+          const admin = await tx.adminUser.findUnique({
+            where: { username: "admin" },
+          });
+
+          if (!admin) {
+            throw new Error(
+              'Temporary admin reset failed: username "admin" does not exist.'
+            );
+          }
+
+          const passwordHash = await hashPassphrase(resetPassword);
+
+          await tx.adminUser.update({
+            where: { id: admin.id },
+            data: {
+              passwordHash,
+              role: "super_admin",
+              active: true,
+              failedLoginAttempts: 0,
+              lockedUntil: null,
+            },
+          });
+        });
+      } catch (error) {
+        // If another request already created the unique marker,
+        // the reset has already been performed.
+        const completed = await db.setting.findUnique({
+          where: { key: "TEMP_ADMIN_PASSWORD_RESET_COMPLETED" },
+        });
+
+        if (!completed) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  // Normal bootstrap behavior.
+  const count = await db.adminUser.count();
+  if (count > 0) return;
+
+  const cfg = loadConfig();
+
+  if (!cfg.ADMIN_USERNAME || !cfg.ADMIN_PASSWORD_HASH) return;
+
+  await db.adminUser.create({
+    data: {
+      username: cfg.ADMIN_USERNAME,
+      passwordHash: cfg.ADMIN_PASSWORD_HASH,
+      role: "super_admin",
+    },
   });
 }
 
