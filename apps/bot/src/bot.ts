@@ -98,6 +98,15 @@ export function createBot(): Bot<BotContext> {
 
   // Resolve/create our internal User row for every incoming update before any command runs.
   bot.use(async (ctx, next) => {
+    log.info(
+      {
+        updateId: ctx.update.update_id,
+        userId: ctx.from?.id,
+        username: ctx.from?.username,
+        text: ctx.message?.text,
+      },
+      "Telegram update received"
+    );
     if (!ctx.from) return next();
     const user = await getOrCreateUser(String(ctx.from.id), ctx.from.username);
     ctx.userId = user.id;
