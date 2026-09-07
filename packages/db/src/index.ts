@@ -1,24 +1,21 @@
-import {
-  PrismaClient,
-  Prisma,
-} from "../generated/index.js";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 import type {
-  User,
   Wallet,
+  User,
   Position,
   Trade,
-  FeeLedger,
-  Watchlist,
   SafetyCheck,
-  Setting,
   Rule,
   RuleExecution,
+  Setting,
+  Watchlist,
   NudgeMessage,
   KeyAccessLog,
   AdminUser,
   AdminAuditLog,
-} from "../generated/index.js";
+  FeeLedger,
+} from "@prisma/client";
 
 export {
   PrismaClient,
@@ -26,28 +23,27 @@ export {
 };
 
 export type {
-  User,
   Wallet,
+  User,
   Position,
   Trade,
-  FeeLedger,
-  Watchlist,
   SafetyCheck,
-  Setting,
   Rule,
   RuleExecution,
+  Setting,
+  Watchlist,
   NudgeMessage,
   KeyAccessLog,
   AdminUser,
   AdminAuditLog,
+  FeeLedger,
 };
 
 let client: PrismaClient | undefined;
 
 /**
  * Process-wide Prisma client singleton.
- * Prevents multiple Prisma clients from being created during
- * development/hot-reload and worker initialization.
+ * Avoids exhausting database connections on hot reload.
  */
 export function getDb(): PrismaClient {
   if (!client) {
