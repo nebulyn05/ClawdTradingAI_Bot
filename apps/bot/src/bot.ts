@@ -107,8 +107,18 @@ export function createBot(): Bot<BotContext> {
       },
       "Telegram update received"
     );
+  
+    await next();
+  });
+  
+  bot.use(async (ctx, next) => {
     if (!ctx.from) return next();
-    const user = await getOrCreateUser(String(ctx.from.id), ctx.from.username);
+  
+    const user = await getOrCreateUser(
+      String(ctx.from.id),
+      ctx.from.username
+    );
+  
     ctx.userId = user.id;
     await next();
   });
