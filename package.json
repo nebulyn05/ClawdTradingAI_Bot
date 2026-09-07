@@ -9,7 +9,7 @@
     "packages/specialists/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "tsc -b"
     "dev:bot": "npm run dev --workspace=apps/bot",
     "dev:worker": "npm run dev --workspace=apps/worker",
     "dev:admin": "npm run dev --workspace=apps/admin",
