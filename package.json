@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run db:generate && tsc -b",
-    "start": "npm run start --workspace=apps/bot"
+    "start": "npm run start --workspace=apps/bot",
     "dev:bot": "npm run dev --workspace=apps/bot",
     "dev:worker": "npm run dev --workspace=apps/worker",
     "dev:admin": "npm run dev --workspace=apps/admin",
