@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "db:generate": "prisma generate --schema prisma/schema.prisma",
-    "build": "tsc -b",
+    "build": "prisma generate --schema prisma/schema.prisma && tsc -b",
     "dev": "tsc -b --watch"
   },
   "dependencies": {
