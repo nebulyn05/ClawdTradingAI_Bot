@@ -9,7 +9,7 @@
     "packages/specialists/*"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "npm run db:generate && tsc -b",
     "dev:bot": "npm run dev --workspace=apps/bot",
     "dev:worker": "npm run dev --workspace=apps/worker",
     "dev:admin": "npm run dev --workspace=apps/admin",
