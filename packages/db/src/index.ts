@@ -15,6 +15,7 @@ import type {
   AdminUser,
   AdminAuditLog,
   FeeLedger,
+  AdminRole,
 } from "@prisma/client";
 
 export {
@@ -37,6 +38,7 @@ export type {
   AdminUser,
   AdminAuditLog,
   FeeLedger,
+  AdminRole,
 };
 
 let client: PrismaClient | undefined;
