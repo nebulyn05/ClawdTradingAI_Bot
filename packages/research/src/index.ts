@@ -5,3 +5,4 @@ export * from "./paper.js";
 export * from "./collector.js";
 export * from "./market-data.js";
 export * from "./security.js";
+export * from "./paper-executor.js";
