@@ -46,20 +46,33 @@ export function watchPumpFunLaunches(
           return;
         }
 
-        const accountKeys = message.getAccountKeys({
+        const resolvedKeys = message.getAccountKeys({
           addressLookupTableAccounts: lookupAccounts.filter(
             (value): value is NonNullable<typeof value> => value !== null,
           ),
-        }).staticAccountKeys;
+        });
 
-        const mint = accountKeys[1]?.toBase58();
+        const compiled = "compiledInstructions" in message
+          ? message.compiledInstructions
+          : message.instructions;
+        const pumpInstruction = compiled.find((instruction) => {
+          const programId = resolvedKeys.get(instruction.programIdIndex);
+          return programId?.equals(PUMP_FUN_PROGRAM_ID) ?? false;
+        });
+
+        const instructionAccountIndexes = pumpInstruction
+          ? ("accountKeyIndexes" in pumpInstruction ? pumpInstruction.accountKeyIndexes : pumpInstruction.accounts)
+          : [];
+        const instructionAccounts = instructionAccountIndexes
+          .map((index) => resolvedKeys.get(index))
+          .filter((value): value is PublicKey => value !== undefined);
+
+        // Pump.fun create/create_v2 account order starts with mint,
+        // mint-authority, then bonding-curve. This is more reliable than
+        // assuming a fixed transaction-wide account-key index.
+        const mint = instructionAccounts[0]?.toBase58();
         if (!mint) return;
-
-        // In Pump.fun create transactions the bonding curve is the third
-        // account after the payer/mint slots (zero-based index 3). Preserve
-        // its address in the event so research can read the exact account
-        // observed on-chain instead of depending only on PDA derivation.
-        const bondingCurve = accountKeys[3]?.toBase58();
+        const bondingCurve = instructionAccounts[2]?.toBase58();
 
         onEvent({
           chain: "solana",
