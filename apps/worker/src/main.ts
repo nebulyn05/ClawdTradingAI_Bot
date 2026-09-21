@@ -94,17 +94,52 @@ function wireEventBus(): void {
 async function main() {
   const cfg = loadConfig();
   const stopHealthServer = startHealthServer();
+  const researchOnly = process.env.RESEARCH_ONLY === "true";
+
+  if (researchOnly) {
+    log.info("Starting Solana research/paper-trading worker (research-only mode)");
+
+    // Research mode deliberately excludes Scout, Arbiter, Router, position
+    // monitoring, rule engine and Redis event publishing. This prevents the
+    // research environment from invoking unrelated multi-chain infrastructure
+    // or any real execution path.
+    const stopResearch = startResearchCollector();
+    const stopSolanaMarketData = startSolanaMarketDataCollector();
+    const stopSniper = startSniper(["solana"]);
+
+    const onResearchCandidate = async (pair: Parameters<typeof eventBus.emit>[1] extends never ? never : any) => {
+      if (!pair || pair.chain !== "solana") return;
+      await getOrScreenToken("solana", pair.tokenAddress).catch((err) => {
+        log.warn({ err, tokenAddress: pair.tokenAddress }, "Research Guard screening failed");
+      });
+    };
+    const stopResearchGuard = eventBus.on("sniper.newPair", (pair) => {
+      void onResearchCandidate(pair);
+    });
+
+    const shutdownResearch = () => {
+      log.info("Shutting down research worker...");
+      stopResearchGuard();
+      stopResearch();
+      stopSolanaMarketData();
+      stopSniper();
+      stopHealthServer();
+      process.exit(0);
+    };
+    process.once("SIGINT", shutdownResearch);
+    process.once("SIGTERM", shutdownResearch);
+    return;
+  }
+
   log.info("Starting Clawd Agents worker (Sniper/Scout -> Guard -> Router, Arbiter detection)");
 
-  // Keep-alive for Render free tier web services (admin + website)
-  // Uses RENDER_ADMIN_URL and RENDER_WEBSITE_URL env vars (set in Render dashboard)
   const adminUrl = process.env.RENDER_ADMIN_URL;
   const websiteUrl = process.env.RENDER_WEBSITE_URL;
   const keepAliveUrls = [adminUrl, websiteUrl].filter((u): u is string => Boolean(u));
   if (keepAliveUrls.length > 0) {
     startKeepAlive({
       urls: keepAliveUrls.map((u) => `${u}/api/health`),
-      intervalMs: 10 * 60 * 1000, // 10 minutes
+      intervalMs: 10 * 60 * 1000,
       verbose: false,
     });
   } else {
@@ -119,16 +154,10 @@ async function main() {
   const stopKolTracking = startKolTracking();
   const stopArbiter = startArbiter(cfg.ARBITER_SCAN_INTERVAL_MS);
   const stopMonitor = startPositionMonitor(cfg.POSITION_MONITOR_INTERVAL_MS);
-  // No-op when AI_FEATURES_ENABLED is false — reviewTpSlWithAi short-circuits.
   const stopAiTpSl = startAiTpSlReview(cfg.AI_TP_SL_REVIEW_INTERVAL_MS);
-  // Admin-dashboard-defined conditional triggers (e.g. "profit above X -> buy Y").
   const stopRuleEngine = startRuleEngine(cfg.RULE_ENGINE_INTERVAL_MS);
-  // Rolling accuracy of Guard's own past decisions vs. what actually happened.
   const stopDriftDetection = startDriftDetection(cfg.GUARD_DRIFT_CHECK_INTERVAL_MS);
-  // Trips TRADING_PAUSED (new trades only) on a realized-P&L drawdown breach.
   const stopDrawdownCheck = startDrawdownCheck(cfg.DRAWDOWN_CHECK_INTERVAL_MS);
-  // The bot runs in a separate process — bridge the events it needs for
-  // user-facing notifications out over Redis (see @clawd/core/redis-bridge).
   const stopPublishing = startPublishingToRedis([
     "router.positionOpened",
     "router.positionClosed",
@@ -157,7 +186,6 @@ async function main() {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
 }
-
 main().catch((err) => {
   console.error("Fatal error starting worker:", err);
   process.exit(1);
