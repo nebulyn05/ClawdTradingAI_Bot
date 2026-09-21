@@ -28,7 +28,7 @@ function creatorRugRate(o: MarketObservation): number {
   return Math.max(0, Math.min(1, (h.rugs ?? 0) / h.launches));
 }
 export function classifySafety(score:number, passed:boolean, observation:MarketObservation):{score:number;level:SafetyLevel;passed:boolean} {
-  if (!passed || (observation.rugIndicators?.length ?? 0) > 0) return {score:Math.max(0,score),level:0,passed:false};
+  if (!passed) return {score:Math.max(0,score),level:0,passed:false};
   if (score < 60) return {score,level:1,passed:false};
   if (score < 75) return {score,level:2,passed:true};
   if (score < 90) return {score,level:3,passed:true};
