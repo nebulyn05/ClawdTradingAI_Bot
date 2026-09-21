@@ -17,7 +17,7 @@
     "dev:website": "npm run dev --workspace=apps/website",
     "test": "vitest run",
     "lint": "tsc -b --pretty",
-    "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma && prisma migrate deploy --schema packages/db/prisma/schema.prisma",
+    "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma && prisma db push --schema packages/db/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "serve:website": "serve website -l 8080"
   },
