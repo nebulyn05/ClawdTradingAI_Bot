@@ -381,3 +381,161 @@ model AdminAuditLog {
   @@index([createdAt])
   @@map("admin_audit_logs")
 }
+
+
+enum ResearchSignalDecision {
+  BUY
+  WATCH
+  WAIT
+  REJECT
+}
+
+enum ResearchStrategy {
+  conservative
+  momentum
+  early_entry
+  speculative
+}
+
+enum ResearchPositionStatus {
+  open
+  closed
+}
+
+model ResearchOpportunity {
+  id             String   @id @default(cuid())
+  chain          Chain
+  tokenAddress   String
+  pairAddress    String?
+  dex            String?
+  source         String
+  detectedAt     DateTime
+  launchTime     DateTime?
+  createdAt      DateTime @default(now())
+
+  observations ResearchObservation[]
+  signals      ResearchSignal[]
+  paperPositions ResearchPaperPosition[]
+
+  @@index([chain, tokenAddress])
+  @@index([detectedAt])
+  @@map("research_opportunities")
+}
+
+model ResearchObservation {
+  id                   String   @id @default(cuid())
+  opportunityId        String
+  opportunity           ResearchOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  observedAt            DateTime
+
+  priceUsd              Float?
+  liquidityUsd         Float?
+  marketCapUsd         Float?
+  volumeUsd            Float?
+  buyCount             Int?
+  sellCount             Int?
+  uniqueBuyers         Int?
+  uniqueSellers        Int?
+  holderCount          Int?
+  top10HolderPct       Float?
+  creatorWallet        String?
+  creatorLaunches      Int?
+  creatorRugs          Int?
+  creatorSuccessful    Int?
+  liquidityChangePct   Float?
+  walletActivityScore Float?
+  priceVelocityPct     Float?
+  priceAccelerationPct Float?
+  rugIndicators        Json?
+
+  safetyScore          Int?
+  safetyLevel          Int?
+  safetyPassed         Boolean?
+
+  features             Json?
+  createdAt            DateTime @default(now())
+
+  @@index([opportunityId, observedAt])
+  @@map("research_observations")
+}
+
+model ResearchSignal {
+  id             String   @id @default(cuid())
+  opportunityId  String
+  opportunity   ResearchOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  strategy       ResearchStrategy
+  decision       ResearchSignalDecision
+  score          Float
+  confidence     Float
+  reasons        Json
+  generatedAt    DateTime @default(now())
+
+  @@index([strategy, generatedAt])
+  @@index([opportunityId])
+  @@map("research_signals")
+}
+
+model ResearchPaperPosition {
+  id             String   @id @default(cuid())
+  opportunityId  String
+  opportunity   ResearchOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  strategy       ResearchStrategy
+  chain          Chain
+  tokenAddress   String
+  entryPriceUsd  Float
+  quantity       Float
+  investedUsd    Float
+  openedAt       DateTime
+  currentPriceUsd Float
+  status         ResearchPositionStatus @default(open)
+  exitPriceUsd   Float?
+  closedAt       DateTime?
+  pnlUsd         Float?
+  returnPct      Float?
+  exitReason     String?
+
+  trades ResearchPaperTrade[]
+
+  @@index([status, openedAt])
+  @@index([strategy, tokenAddress])
+  @@map("research_paper_positions")
+}
+
+model ResearchPaperTrade {
+  id            String   @id @default(cuid())
+  positionId    String
+  position      ResearchPaperPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  side          TradeSide
+  priceUsd      Float
+  quantity      Float
+  notionalUsd   Float
+  feeUsd        Float
+  slippagePct   Float
+  createdAt     DateTime @default(now())
+
+  @@index([positionId])
+  @@map("research_paper_trades")
+}
+
+model ResearchOutcome {
+  id              String   @id @default(cuid())
+  opportunityId   String
+  opportunity    ResearchOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  return5mPct     Float?
+  return10mPct    Float?
+  return15mPct    Float?
+  return30mPct    Float?
+  return1hPct     Float?
+  return2hPct     Float?
+  peakGainPct     Float?
+  maxDrawdownPct  Float?
+  timeToPeakSec   Int?
+  timeToStopSec   Int?
+  finalReturnPct  Float?
+  rugged          Boolean @default(false)
+  liquidityRemoved Boolean @default(false)
+  measuredAt      DateTime @default(now())
+
+  @@unique([opportunityId])
+  @@map("research_outcomes")
+}
