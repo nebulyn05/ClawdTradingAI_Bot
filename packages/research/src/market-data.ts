@@ -47,7 +47,14 @@ async function fetchPair(pairAddress: string): Promise<DexPair | null> {
   const tokenResponse = await fetch(tokenUrl, { headers });
   if (!tokenResponse.ok) throw new Error("DEX Screener token HTTP " + tokenResponse.status);
   const tokenBody = (await tokenResponse.json()) as { pairs?: DexPair[] | null };
-  return tokenBody.pairs?.find((candidate) => candidate.chainId === "solana") ?? tokenBody.pairs?.[0] ?? null;
+  const tokenPair = tokenBody.pairs?.find((candidate) => candidate.chainId === "solana") ?? tokenBody.pairs?.[0];
+  if (tokenPair) return tokenPair;
+
+  const searchUrl = DEXSCREENER_BASE + "/latest/dex/search?q=" + encodeURIComponent(pairAddress);
+  const searchResponse = await fetch(searchUrl, { headers });
+  if (!searchResponse.ok) throw new Error("DEX Screener search HTTP " + searchResponse.status);
+  const searchBody = (await searchResponse.json()) as { pairs?: DexPair[] | null };
+  return searchBody.pairs?.find((candidate) => candidate.chainId === "solana") ?? searchBody.pairs?.[0] ?? null;
 }
 
 function buildObservation(pair: DexPair, previous?: { priceUsd: number | null; liquidityUsd: number | null; observedAt: Date }): MarketObservation | null {
