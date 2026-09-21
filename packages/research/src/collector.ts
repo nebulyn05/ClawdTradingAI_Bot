@@ -1,6 +1,7 @@
 import { eventBus, createLogger, type NewPairEvent, type SafetyCheckResult } from "@clawd/core";
 import { getDb } from "@clawd/db";
-import { buildSnapshot, defaultStrategies } from "./index.js";
+import { buildSnapshot } from "./features.js";
+import { defaultStrategies } from "./strategies.js";
 import type { MarketObservation } from "./types.js";
 
 const log = createLogger("research:collector");
@@ -107,7 +108,31 @@ export function startResearchCollector(): () => void {
   };
 
   const onGuard = (result: SafetyCheckResult) => {
-    safety.set(result.chain + ":" + result.tokenAddress, result);
+    const key = result.chain + ":" + result.tokenAddress;
+    safety.set(key, result);
+    void (async () => {
+      try {
+        const opportunityId = opportunities.get(key);
+        if (!opportunityId) return;
+        const db = getDb();
+        const latest = await db.researchObservation.findFirst({
+          where: { opportunityId },
+          orderBy: { observedAt: "desc" },
+        });
+        if (!latest) return;
+        await db.researchObservation.update({
+          where: { id: latest.id },
+          data: {
+            safetyScore: result.score,
+            safetyLevel: result.passed ? (result.score >= 90 ? 4 : result.score >= 75 ? 3 : result.score >= 60 ? 2 : 1) : 0,
+            safetyPassed: result.passed,
+            rugIndicators: result.reasons,
+          },
+        });
+      } catch (err) {
+        log.warn({ err, chain: result.chain, tokenAddress: result.tokenAddress }, "Failed to attach Guard result to research observation");
+      }
+    })();
   };
 
   const stopPair = eventBus.on("sniper.newPair", onPair);
