@@ -55,10 +55,16 @@ export function watchPumpFunLaunches(
         const mint = accountKeys[1]?.toBase58();
         if (!mint) return;
 
+        // In Pump.fun create transactions the bonding curve is the third
+        // account after the payer/mint slots (zero-based index 3). Preserve
+        // its address in the event so research can read the exact account
+        // observed on-chain instead of depending only on PDA derivation.
+        const bondingCurve = accountKeys[3]?.toBase58();
+
         onEvent({
           chain: "solana",
           tokenAddress: mint,
-          pairAddress: mint,
+          pairAddress: bondingCurve ?? mint,
           dex: "pump.fun",
           detectedAt: Date.now(),
         });
