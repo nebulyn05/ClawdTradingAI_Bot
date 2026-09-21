@@ -227,6 +227,8 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     // batched account reads, which is important for a 15-second research loop
     // and avoids one RPC request per token.
     const curveByToken = new Map<string, PumpCurveState | null>();
+    let curveAccountsFound = 0;
+    let curveAccountsParsed = 0;
     try {
       const curveAddresses = opportunities.map((opportunity) => {
         const candidate = opportunity.pairAddress;
@@ -237,7 +239,19 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
       });
       const curveAccounts = await solana.getMultipleAccountsInfo(curveAddresses, "confirmed");
       opportunities.forEach((opportunity, index) => {
-        curveByToken.set(opportunity.tokenAddress, parsePumpCurveAccount(curveAccounts[index]));
+        const account = curveAccounts[index];
+        if (account) curveAccountsFound += 1;
+        const parsed = parsePumpCurveAccount(account);
+        if (parsed) curveAccountsParsed += 1;
+        curveByToken.set(opportunity.tokenAddress, parsed);
+        if (account && !parsed) {
+          log.warn({
+            tokenAddress: opportunity.tokenAddress,
+            curveAddress: curveAddresses[index].toBase58(),
+            dataLength: account.data.length,
+            owner: account.owner.toBase58(),
+          }, "Pump.fun bonding curve account found but could not be parsed");
+        }
       });
     } catch (err) {
       log.warn({ err, opportunities: opportunities.length }, "Failed to batch-read Pump.fun bonding curves");
@@ -339,6 +353,8 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     log.info({
       opportunities: opportunities.length,
       curveAccountsRead: curveByToken.size,
+      curveAccountsFound,
+      curveAccountsParsed,
       refreshed,
       onChainOnly,
       dexEnriched,
