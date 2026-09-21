@@ -35,6 +35,13 @@ export async function openPosition(
 ) {
   const db = getDb();
   const cfg = loadConfig();
+  const realTradingEnabled =
+    process.env.TRADING_MODE === "live" &&
+    process.env.REAL_TRADING_ENABLED === "true";
+  if (!realTradingEnabled) {
+    log.info({ userId, chain, tokenAddress }, "Skipping real execution — research/paper mode is active");
+    return null;
+  }
   const network = networkForChain(chain);
 
   // Circuit breaker (see circuit-breaker.ts / drawdown-check.ts): only ever
