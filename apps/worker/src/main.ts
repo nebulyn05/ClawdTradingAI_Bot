@@ -100,6 +100,22 @@ async function main() {
   if (researchOnly) {
     log.info("Starting Solana research/paper-trading worker (research-only mode)");
 
+    if (process.env.DB_DIAGNOSTICS === "true") {
+      try {
+        const { execFile } = await import("node:child_process");
+        await new Promise<void>((resolve) => {
+          execFile("node", ["scripts/research-status.mjs"], { env: process.env }, (error, stdout, stderr) => {
+            if (stdout) log.info({ output: stdout.trim() }, "Research database diagnostics");
+            if (stderr) log.warn({ output: stderr.trim() }, "Research database diagnostics stderr");
+            if (error) log.warn({ err: error.message }, "Research database diagnostics failed");
+            resolve();
+          });
+        });
+      } catch (err) {
+        log.warn({ err }, "Unable to run research database diagnostics");
+      }
+    }
+
     // Research mode deliberately excludes Scout, Arbiter, Router, position
     // monitoring, rule engine and Redis event publishing. This prevents the
     // research environment from invoking unrelated multi-chain infrastructure
