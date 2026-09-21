@@ -247,34 +247,53 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     });
     const solPriceUsd = await fetchSolPriceUsd();
 
-    // Read all Pump.fun bonding curves in one RPC request. Solana supports
-    // batched account reads, which is important for a 15-second research loop
-    // and avoids one RPC request per token.
+    // Read both the deterministic PDA and the bonding-curve account captured
+    // directly from the Pump.fun create instruction. The latter is important
+    // for current create_v2 launches and also lets us recover opportunities
+    // created by older watcher versions without trusting a stale pairAddress.
     const curveByToken = new Map<string, PumpCurveState | null>();
+    const curveAddressByToken = new Map<string, string>();
     let curveAccountsFound = 0;
     let curveAccountsParsed = 0;
     try {
-      const curveAddresses = opportunities.map((opportunity) => {
-        // Always prefer the deterministic Pump.fun bonding-curve PDA derived
-        // from the mint. Older opportunities may contain a bad pairAddress
-        // captured by the pre-fix watcher; using it here can silently read a
-        // System Program account instead of the bonding curve.
-        return derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress));
+      const candidates = opportunities.map((opportunity) => {
+        const derived = derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress)).toBase58();
+        const captured = opportunity.pairAddress;
+        const addresses = captured && captured !== opportunity.tokenAddress
+          ? [captured, derived]
+          : [derived];
+        return { opportunity, addresses: [...new Set(addresses)] };
       });
-      const curveAccounts = await solana.getMultipleAccountsInfo(curveAddresses, "confirmed");
-      opportunities.forEach((opportunity, index) => {
-        const account = curveAccounts[index];
-        if (account) curveAccountsFound += 1;
-        const parsed = parsePumpCurveAccount(account);
-        if (parsed) curveAccountsParsed += 1;
-        curveByToken.set(opportunity.tokenAddress, parsed);
-        if (account && !parsed) {
+      const flatAddresses = [...new Set(candidates.flatMap((item) => item.addresses))].map((address) => new PublicKey(address));
+      const accountByAddress = new Map<string, Awaited<ReturnType<typeof solana.getAccountInfo>>>();
+      const accounts = await solana.getMultipleAccountsInfo(flatAddresses, "confirmed");
+      flatAddresses.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
+
+      candidates.forEach(({ opportunity, addresses }) => {
+        let selected: PumpCurveState | null = null;
+        let selectedAddress: string | undefined;
+        for (const address of addresses) {
+          const account = accountByAddress.get(address);
+          const parsed = parsePumpCurveAccount(account);
+          if (parsed) {
+            selected = parsed;
+            selectedAddress = address;
+            break;
+          }
+        }
+        const anyAccount = addresses.map((address) => accountByAddress.get(address)).find(Boolean);
+        if (anyAccount) curveAccountsFound += 1;
+        if (selected) curveAccountsParsed += 1;
+        curveByToken.set(opportunity.tokenAddress, selected);
+        if (selectedAddress) curveAddressByToken.set(opportunity.tokenAddress, selectedAddress);
+
+        if (anyAccount && !selected) {
           log.warn({
             tokenAddress: opportunity.tokenAddress,
-            curveAddress: curveAddresses[index]?.toBase58(),
-            dataLength: account.data.length,
-            owner: account.owner.toBase58(),
-          }, "Pump.fun bonding curve account found but could not be parsed");
+            candidateCurveAddresses: addresses,
+            dataLength: anyAccount.data.length,
+            owner: anyAccount.owner.toBase58(),
+          }, "Pump.fun bonding curve candidates found but none parsed");
         }
       });
     } catch (err) {
@@ -303,9 +322,11 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         });
 
         const curve = curveByToken.get(opportunity.tokenAddress) ?? null;
+        const curveAddress = curveAddressByToken.get(opportunity.tokenAddress);
         let observation = curve
           ? buildPumpObservation(opportunity.tokenAddress, curve, solPriceUsd, previous ?? undefined)
           : null;
+        if (observation && curveAddress) observation.pairAddress = curveAddress;
 
         if (observation) {
           const lastDexAt = dexLastEnrichment.get(opportunity.id) ?? 0;
