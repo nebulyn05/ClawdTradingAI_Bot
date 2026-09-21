@@ -8,6 +8,7 @@ import {
   startKeepAlive,
   type Chain,
   type SignalSource,
+  type NewPairEvent,
 } from "@clawd/core";
 import { getDb } from "@clawd/db";
 import { startSniper } from "@clawd/sniper";
