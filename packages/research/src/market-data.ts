@@ -247,7 +247,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         if (account && !parsed) {
           log.warn({
             tokenAddress: opportunity.tokenAddress,
-            curveAddress: curveAddresses[index].toBase58(),
+            curveAddress: curveAddresses[index]?.toBase58(),
             dataLength: account.data.length,
             owner: account.owner.toBase58(),
           }, "Pump.fun bonding curve account found but could not be parsed");
