@@ -11,6 +11,11 @@ const DEXSCREENER_BASE = "https://api.dexscreener.com";
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 const SOL_PRICE_MINT = "So11111111111111111111111111111111111111112";
 const SOL_PRICE_URL = process.env.SOL_PRICE_URL || "https://lite-api.jup.ag/price/v3?ids=" + SOL_PRICE_MINT;
+const SOL_PRICE_FALLBACK_URLS = [
+  process.env.SOL_PRICE_FALLBACK_URL,
+  "https://api.coinbase.com/v2/prices/SOL-USD/spot",
+  "https://api.kraken.com/0/public/Ticker?pair=SOLUSD",
+].filter((url): url is string => Boolean(url));
 const PUMP_FUN_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const TOKEN_DECIMALS = 6;
@@ -95,19 +100,37 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
     return cachedSolPriceUsd;
   }
 
-  try {
-    const response = await fetch(SOL_PRICE_URL, { headers: { accept: "application/json" } });
-    if (!response.ok) throw new Error("SOL price HTTP " + response.status);
-    const body = (await response.json()) as Record<string, { usdPrice?: number | string } | undefined>;
-    const price = finite(Number(body[SOL_PRICE_MINT]?.usdPrice));
-    if (price !== undefined && price > 0) {
-      cachedSolPriceUsd = price;
-      cachedSolPriceAt = now;
-      return price;
+  const urls = [SOL_PRICE_URL, ...SOL_PRICE_FALLBACK_URLS.filter((url) => url !== SOL_PRICE_URL)];
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { headers: { accept: "application/json" } });
+      if (!response.ok) throw new Error("SOL price HTTP " + response.status);
+      const body = await response.json() as Record<string, unknown>;
+
+      let price: number | undefined;
+      if (url.includes("jup.ag")) {
+        const value = body[SOL_PRICE_MINT] as { usdPrice?: number | string } | undefined;
+        price = finite(Number(value?.usdPrice));
+      } else if (url.includes("coinbase.com")) {
+        const value = body.data as { amount?: string } | undefined;
+        price = finite(Number(value?.amount));
+      } else if (url.includes("kraken.com")) {
+        const result = body.result as Record<string, { c?: string[] }> | undefined;
+        const ticker = result ? Object.values(result)[0] : undefined;
+        price = finite(Number(ticker?.c?.[0]));
+      }
+
+      if (price !== undefined && price > 0) {
+        cachedSolPriceUsd = price;
+        cachedSolPriceAt = now;
+        log.info({ source: url.includes("jup.ag") ? "jupiter" : url.includes("coinbase.com") ? "coinbase" : "kraken", priceUsd: price }, "SOL/USD price refreshed");
+        return price;
+      }
+    } catch (err) {
+      log.warn({ err, source: url }, "SOL/USD price provider failed");
     }
-  } catch (err) {
-    log.warn({ err }, "Failed to refresh SOL/USD price");
   }
+
   return cachedSolPriceUsd;
 }
 
