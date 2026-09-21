@@ -9,7 +9,7 @@ const log = createLogger("research:market-data");
 const DEFAULT_INTERVAL_MS = 15_000;
 const DEXSCREENER_BASE = "https://api.dexscreener.com";
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
-const SOL_PRICE_URL = process.env.SOL_PRICE_URL || "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd";
+const SOL_PRICE_URL = process.env.SOL_PRICE_URL || "https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT";
 const PUMP_FUN_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const TOKEN_DECIMALS = 6;
@@ -97,8 +97,8 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
   try {
     const response = await fetch(SOL_PRICE_URL, { headers: { accept: "application/json" } });
     if (!response.ok) throw new Error("SOL price HTTP " + response.status);
-    const body = (await response.json()) as { solana?: { usd?: number } };
-    const price = finite(body.solana?.usd);
+    const body = (await response.json()) as { price?: string | number; solana?: { usd?: number } };
+    const price = finite(Number(body.price)) ?? finite(body.solana?.usd);
     if (price !== undefined && price > 0) {
       cachedSolPriceUsd = price;
       cachedSolPriceAt = now;
