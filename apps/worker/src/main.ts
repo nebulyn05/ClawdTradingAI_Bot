@@ -107,7 +107,7 @@ async function main() {
     const stopSolanaMarketData = startSolanaMarketDataCollector();
     const stopSniper = startSniper(["solana"]);
 
-    const onResearchCandidate = async (pair: Parameters<typeof eventBus.emit>[1] extends never ? never : any) => {
+    const onResearchCandidate = async (pair: NewPairEvent) => {
       if (!pair || pair.chain !== "solana") return;
       await getOrScreenToken("solana", pair.tokenAddress).catch((err) => {
         log.warn({ err, tokenAddress: pair.tokenAddress }, "Research Guard screening failed");
