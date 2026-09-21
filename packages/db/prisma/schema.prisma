@@ -416,6 +416,7 @@ model ResearchOpportunity {
   observations ResearchObservation[]
   signals      ResearchSignal[]
   paperPositions ResearchPaperPosition[]
+  outcome        ResearchOutcome?
 
   @@index([chain, tokenAddress])
   @@index([detectedAt])
