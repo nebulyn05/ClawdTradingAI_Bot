@@ -110,7 +110,7 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
   return cachedSolPriceUsd;
 }
 
-function parsePumpCurveAccount(account: Awaited<ReturnType<typeof solana.getAccountInfo>>): PumpCurveState | null {
+function parsePumpCurveAccount(account: Awaited<ReturnType<typeof solana.getAccountInfo>> | undefined): PumpCurveState | null {
   if (!account || !account.owner.equals(PUMP_FUN_PROGRAM_ID)) return null;
   return parsePumpCurve(Buffer.from(account.data));
 }
