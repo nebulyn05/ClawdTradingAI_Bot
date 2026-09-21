@@ -278,8 +278,10 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         // If the bonding curve has graduated/migrated, DEX Screener can still
         // provide the secondary post-migration pool snapshot. This is deliberately
         // limited and never blocks the on-chain path above.
-        if (dexAttempts < maxDexEnrichmentsPerTick) {
+        const lastDexAt = dexLastEnrichment.get(opportunity.id) ?? 0;
+        if (dexAttempts < maxDexEnrichmentsPerTick && Date.now() - lastDexAt >= DEX_ENRICHMENT_TTL_MS) {
           dexAttempts += 1;
+          dexLastEnrichment.set(opportunity.id, Date.now());
           const dexPair = await fetchDexPair(opportunity.tokenAddress);
           if (dexPair) {
             const previousObservation = await db.researchObservation.findFirst({
