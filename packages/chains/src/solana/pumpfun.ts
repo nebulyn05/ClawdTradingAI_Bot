@@ -52,24 +52,26 @@ export function watchPumpFunLaunches(
           ),
         });
 
-        const compiled = "compiledInstructions" in message
-          ? message.compiledInstructions
-          : message.instructions;
-        const pumpInstruction = compiled.find((instruction) => {
+        const compiled = (message as unknown as {
+          compiledInstructions?: Array<{
+            programIdIndex: number;
+            accountKeyIndexes: number[];
+          }>;
+        }).compiledInstructions ?? [];
+
+        const pumpInstruction = compiled.find((instruction: {
+          programIdIndex: number;
+          accountKeyIndexes: number[];
+        }) => {
           const programId = resolvedKeys.get(instruction.programIdIndex);
           return programId?.equals(PUMP_FUN_PROGRAM_ID) ?? false;
         });
 
-        const instructionAccountIndexes = pumpInstruction
-          ? ("accountKeyIndexes" in pumpInstruction ? pumpInstruction.accountKeyIndexes : pumpInstruction.accounts)
-          : [];
+        const instructionAccountIndexes: number[] = pumpInstruction?.accountKeyIndexes ?? [];
         const instructionAccounts = instructionAccountIndexes
-          .map((index) => resolvedKeys.get(index))
-          .filter((value): value is PublicKey => value !== undefined);
+          .map((index: number) => resolvedKeys.get(index))
+          .filter((value: PublicKey | undefined): value is PublicKey => value !== undefined);
 
-        // Pump.fun create/create_v2 account order starts with mint,
-        // mint-authority, then bonding-curve. This is more reliable than
-        // assuming a fixed transaction-wide account-key index.
         const mint = instructionAccounts[0]?.toBase58();
         if (!mint) return;
         const bondingCurve = instructionAccounts[2]?.toBase58();
