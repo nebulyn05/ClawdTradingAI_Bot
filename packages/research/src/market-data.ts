@@ -247,6 +247,10 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | undefined;
   const running = new Set<string>();
+  // Preserve the exact bonding-curve account decoded from the Pump.fun
+  // create instruction. This avoids depending on a DB round-trip during the
+  // first few seconds of a launch and gives us a precise RPC probe target.
+  const capturedCurveByToken = new Map<string, string>();
 
   const tick = async () => {
     if (stopped) return;
@@ -267,7 +271,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     try {
       const candidates = opportunities.map((opportunity) => {
         const derived = derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress)).toBase58();
-        const captured = opportunity.pairAddress;
+        const captured = capturedCurveByToken.get(opportunity.tokenAddress) ?? opportunity.pairAddress;
         const addresses = captured && captured !== opportunity.tokenAddress
           ? [captured, derived]
           : [derived];
@@ -449,7 +453,29 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     }, "Solana market-data tick");
   };
 
-  const onPair = (_pair: NewPairEvent) => { void tick(); };
+  const onPair = (pair: NewPairEvent) => {
+    if (pair.chain !== "solana") return;
+    if (pair.pairAddress && pair.pairAddress !== pair.tokenAddress) {
+      capturedCurveByToken.set(pair.tokenAddress, pair.pairAddress);
+    }
+    void (async () => {
+      if (pair.pairAddress && pair.pairAddress !== pair.tokenAddress) {
+        try {
+          const account = await solana.getAccountInfo(new PublicKey(pair.pairAddress), "processed");
+          log.info({
+            tokenAddress: pair.tokenAddress,
+            pairAddress: pair.pairAddress,
+            accountFound: Boolean(account),
+            dataLength: account?.data.length,
+            owner: account?.owner.toBase58(),
+          }, "Pump.fun captured curve RPC probe");
+        } catch (err) {
+          log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun captured curve RPC probe failed");
+        }
+      }
+      await tick();
+    })();
+  };
   const unsubscribe = eventBus.on("sniper.newPair", onPair);
   void tick();
   timer = setInterval(() => void tick(), intervalMs);
