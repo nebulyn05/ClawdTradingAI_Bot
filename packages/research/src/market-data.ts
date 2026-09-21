@@ -8,7 +8,11 @@ import { enrichSolanaSecurity } from "./security.js";
 const log = createLogger("research:market-data");
 const DEFAULT_INTERVAL_MS = 15_000;
 const DEXSCREENER_BASE = "https://api.dexscreener.com";
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet.solana.com";
+const SOLANA_RPC_FALLBACK_URLS = [
+  process.env.SOLANA_RPC_FALLBACK_URL,
+  "https://solana-rpc.publicnode.com",
+].filter((url): url is string => Boolean(url) && url !== SOLANA_RPC_URL);
 const SOL_PRICE_MINT = "So11111111111111111111111111111111111111112";
 const SOL_PRICE_URL = process.env.SOL_PRICE_URL || "https://lite-api.jup.ag/price/v3?ids=" + SOL_PRICE_MINT;
 const SOL_PRICE_FALLBACK_URLS = [
@@ -47,6 +51,10 @@ type PumpCurveState = {
 };
 
 const solana = new Connection(SOLANA_RPC_URL, "confirmed");
+const solanaFallbacks = SOLANA_RPC_FALLBACK_URLS.map((url) => ({
+  url,
+  connection: new Connection(url, "confirmed"),
+}));
 let cachedSolPriceUsd: number | undefined;
 let cachedSolPriceAt = 0;
 const dexLastEnrichment = new Map<string, number>();
@@ -266,8 +274,39 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
       });
       const flatAddresses = [...new Set(candidates.flatMap((item) => item.addresses))].map((address) => new PublicKey(address));
       const accountByAddress = new Map<string, Awaited<ReturnType<typeof solana.getAccountInfo>>>();
-      const accounts = await solana.getMultipleAccountsInfo(flatAddresses, "confirmed");
-      flatAddresses.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
+      // Solana's shared public RPC is rate-limited and can occasionally return
+      // null for a very recent account even though the transaction is confirmed.
+      // Read in <=100-key batches, then retry missing accounts against fallback
+      // RPCs before declaring a bonding curve unavailable.
+      const BATCH_SIZE = 100;
+      for (let offset = 0; offset < flatAddresses.length; offset += BATCH_SIZE) {
+        const batch = flatAddresses.slice(offset, offset + BATCH_SIZE);
+        const accounts = await solana.getMultipleAccountsInfo(batch, "confirmed");
+        batch.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
+      }
+
+      const missingAddresses = flatAddresses.filter((address) => !accountByAddress.get(address));
+      if (missingAddresses.length > 0 && solanaFallbacks.length > 0) {
+        for (const fallback of solanaFallbacks) {
+          if (missingAddresses.length === 0) break;
+          try {
+            for (let offset = 0; offset < missingAddresses.length; offset += BATCH_SIZE) {
+              const batch = missingAddresses.slice(offset, offset + BATCH_SIZE);
+              const accounts = await fallback.connection.getMultipleAccountsInfo(batch, "confirmed");
+              batch.forEach((address, index) => {
+                const account = accounts[index] ?? null;
+                if (account) accountByAddress.set(address.toBase58(), account);
+              });
+            }
+            log.info(
+              { provider: fallback.url, recovered: missingAddresses.filter((address) => accountByAddress.get(address)).length },
+              "Pump.fun fallback RPC account recovery attempted",
+            );
+          } catch (err) {
+            log.warn({ err, provider: fallback.url }, "Pump.fun fallback RPC failed");
+          }
+        }
+      }
 
       candidates.forEach(({ opportunity, addresses }) => {
         let selected: PumpCurveState | null = null;
