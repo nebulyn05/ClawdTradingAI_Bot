@@ -2,6 +2,7 @@ import { eventBus, createLogger, type NewPairEvent, type SafetyCheckResult } fro
 import { getDb } from "@clawd/db";
 import { buildSnapshot } from "./features.js";
 import { defaultStrategies } from "./strategies.js";
+import { executePaperSignal } from "./paper-executor.js";
 import type { MarketObservation } from "./types.js";
 
 const log = createLogger("research:collector");
@@ -85,6 +86,16 @@ async function persistObservation(opportunityId: string, observation: MarketObse
         reasons: signal.reasons,
         generatedAt: new Date(signal.generatedAt),
       },
+    });
+
+    await executePaperSignal({
+      opportunityId,
+      strategy: signal.strategy.replace("-", "_") as "conservative" | "momentum" | "early_entry" | "speculative",
+      decision: signal.decision,
+      chain: observation.chain,
+      tokenAddress: observation.tokenAddress,
+      priceUsd: observation.priceUsd,
+      generatedAt: new Date(signal.generatedAt),
     });
   }
 }
