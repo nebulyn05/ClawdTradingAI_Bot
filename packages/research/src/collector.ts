@@ -74,8 +74,11 @@ async function persistObservation(opportunityId: string, observation: MarketObse
     },
   });
 
+  const signalSummary: Array<{ strategy: string; decision: string; score: number; confidence: number }> = [];
+
   for (const strategy of defaultStrategies) {
     const signal = strategy.evaluate(snapshot);
+    signalSummary.push({ strategy: signal.strategy, decision: signal.decision, score: signal.score, confidence: signal.confidence });
     await db.researchSignal.create({
       data: {
         opportunityId,
@@ -98,6 +101,22 @@ async function persistObservation(opportunityId: string, observation: MarketObse
       generatedAt: new Date(signal.generatedAt),
     });
   }
+
+  log.info({
+    opportunityId,
+    tokenAddress: observation.tokenAddress,
+    safetyScore: snapshot.safetyScore,
+    safetyLevel: snapshot.safetyLevel,
+    safetyPassed: snapshot.safetyPassed,
+    priceUsd: observation.priceUsd,
+    liquidityUsd: observation.liquidityUsd,
+    volumeUsd: observation.volumeUsd,
+    buyCount: observation.buyCount,
+    sellCount: observation.sellCount,
+    priceVelocityPct: observation.priceVelocityPct,
+    priceAccelerationPct: observation.priceAccelerationPct,
+    signals: signalSummary,
+  }, "Research strategy evaluation");
 }
 
 export async function recordMarketObservation(opportunityId: string, observation: MarketObservation): Promise<void> {
