@@ -24,7 +24,27 @@ async function persistPair(pair: NewPairEvent): Promise<string> {
     where: { chain: pair.chain, tokenAddress: pair.tokenAddress },
     orderBy: { detectedAt: "asc" },
   });
-  if (existing) return existing.id;
+  if (existing) {
+    const incomingPair = pair.pairAddress && pair.pairAddress !== pair.tokenAddress ? pair.pairAddress : undefined;
+    const needsPairUpdate = Boolean(incomingPair && existing.pairAddress !== incomingPair);
+    const needsDexUpdate = Boolean(pair.dex && existing.dex !== pair.dex);
+    if (needsPairUpdate || needsDexUpdate) {
+      const updated = await db.researchOpportunity.update({
+        where: { id: existing.id },
+        data: {
+          ...(incomingPair ? { pairAddress: incomingPair } : {}),
+          ...(pair.dex ? { dex: pair.dex } : {}),
+        },
+      });
+      log.info({
+        opportunityId: updated.id,
+        tokenAddress: pair.tokenAddress,
+        previousPairAddress: existing.pairAddress,
+        pairAddress: updated.pairAddress,
+      }, "Research opportunity pair address synchronized");
+    }
+    return existing.id;
+  }
 
   const created = await db.researchOpportunity.create({
     data: {
@@ -143,7 +163,13 @@ export function startResearchCollector(): () => void {
         const id = await persistPair(pair);
         opportunities.set(key, id);
         await persistObservation(id, observationFromPair(pair), safety.get(key));
-        log.info({ chain: pair.chain, tokenAddress: pair.tokenAddress, opportunityId: id }, "Research opportunity recorded");
+        log.info({
+          chain: pair.chain,
+          tokenAddress: pair.tokenAddress,
+          pairAddress: pair.pairAddress,
+          dex: pair.dex,
+          opportunityId: id,
+        }, "Research opportunity recorded");
       } catch (err) {
         log.error({ err, chain: pair.chain, tokenAddress: pair.tokenAddress }, "Failed to record research opportunity");
       }
