@@ -255,10 +255,10 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     let curveAccountsParsed = 0;
     try {
       const curveAddresses = opportunities.map((opportunity) => {
-        const candidate = opportunity.pairAddress;
-        if (candidate && candidate !== opportunity.tokenAddress) {
-          try { return new PublicKey(candidate); } catch { /* fall through */ }
-        }
+        // Always prefer the deterministic Pump.fun bonding-curve PDA derived
+        // from the mint. Older opportunities may contain a bad pairAddress
+        // captured by the pre-fix watcher; using it here can silently read a
+        // System Program account instead of the bonding curve.
         return derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress));
       });
       const curveAccounts = await solana.getMultipleAccountsInfo(curveAddresses, "confirmed");
