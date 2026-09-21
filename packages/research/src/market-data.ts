@@ -42,6 +42,22 @@ type DexPair = {
   pairCreatedAt?: number | null;
 };
 
+type PumpApiCoin = {
+  bonding_curve?: string;
+  creator?: string;
+  complete?: boolean;
+  virtual_sol_reserves?: string | number;
+  virtual_quote_reserves?: string | number;
+  real_sol_reserves?: string | number;
+  real_quote_reserves?: string | number;
+  virtual_token_reserves?: string | number;
+  real_token_reserves?: string | number;
+  token_total_supply?: string | number;
+  usd_market_cap?: string | number;
+  market_cap?: string | number;
+  price_usd?: string | number;
+};
+
 type PumpCurveState = {
   virtualTokenReserves: bigint;
   virtualSolReserves: bigint;
