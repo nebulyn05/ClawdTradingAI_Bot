@@ -11,6 +11,7 @@ const DEXSCREENER_BASE = "https://api.dexscreener.com";
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet.solana.com";
 const SOLANA_RPC_FALLBACK_URLS = [
   process.env.SOLANA_RPC_FALLBACK_URL,
+  "https://api.mainnet-beta.solana.com",
   "https://solana-rpc.publicnode.com",
 ].filter((url): url is string => Boolean(url) && url !== SOLANA_RPC_URL);
 const SOL_PRICE_MINT = "So11111111111111111111111111111111111111112";
@@ -292,7 +293,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           try {
             for (let offset = 0; offset < missingAddresses.length; offset += BATCH_SIZE) {
               const batch = missingAddresses.slice(offset, offset + BATCH_SIZE);
-              const accounts = await fallback.connection.getMultipleAccountsInfo(batch, "confirmed");
+              const accounts = await fallback.connection.getMultipleAccountsInfo(batch, "processed");
               batch.forEach((address, index) => {
                 const account = accounts[index] ?? null;
                 if (account) accountByAddress.set(address.toBase58(), account);
