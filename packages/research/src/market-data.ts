@@ -46,7 +46,7 @@ function buildObservation(pair: DexPair, previous?: { priceUsd: number | null; l
   const now = Date.now();
   const previousPrice = previous?.priceUsd ?? undefined;
   const previousLiquidity = previous?.liquidityUsd ?? undefined;
-  const velocity = previousPrice && previous.observedAt ? ((priceUsd / previousPrice) - 1) * 100 : undefined;
+  const velocity = previousPrice !== undefined && previous?.observedAt ? ((priceUsd / previousPrice) - 1) * 100 : undefined;
   const liquidity = finite(pair.liquidity?.usd);
   const buys = finite((pickPeriod(pair.txns, "m5") ?? {}).buys);
   const sells = finite((pickPeriod(pair.txns, "m5") ?? {}).sells);
