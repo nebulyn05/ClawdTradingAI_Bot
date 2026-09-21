@@ -10,12 +10,9 @@ const PUMP_FUN_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5u
 /**
  * Subscribes to Pump.fun "Create" (new token launch) events via log subscription.
  *
- * The mint address is extracted heuristically from the transaction's static
- * account keys (slot 1, matching Pump.fun's current Create instruction account
- * order) rather than a full Anchor IDL decode. This is good enough to detect
- * *that* a launch happened, but should be replaced with proper instruction
- * decoding (or Helius' enhanced/parsed webhook API) before relying on it for
- * real capital — the account-key slot is not a stable protocol guarantee.
+ * Versioned Solana transactions may use Address Lookup Tables (ALTs). We resolve
+ * those tables before reading account keys; otherwise web3.js throws
+ * "Failed to get account keys because address table lookups were not resolved".
  */
 export function watchPumpFunLaunches(
   connection: Connection,
@@ -33,14 +30,35 @@ export function watchPumpFunLaunches(
         });
         if (!tx) return;
 
-        const accountKeys = tx.transaction.message.getAccountKeys().staticAccountKeys;
+        const message = tx.transaction.message;
+        const lookupTables = message.addressTableLookups ?? [];
+
+        const lookupAccounts = await Promise.all(
+          lookupTables.map(async (lookup) => {
+            const result = await connection.getAddressLookupTable(lookup.accountKey);
+            return result.value;
+          }),
+        );
+
+        const missingLookup = lookupAccounts.some((value) => value === null);
+        if (missingLookup) {
+          log.warn({ signature: logInfo.signature }, "Pump.fun transaction referenced an unavailable address lookup table");
+          return;
+        }
+
+        const accountKeys = message.getAccountKeys({
+          addressLookupTableAccounts: lookupAccounts.filter(
+            (value): value is NonNullable<typeof value> => value !== null,
+          ),
+        }).staticAccountKeys;
+
         const mint = accountKeys[1]?.toBase58();
         if (!mint) return;
 
         onEvent({
           chain: "solana",
           tokenAddress: mint,
-          pairAddress: mint, // pre-migration, the bonding curve is keyed by the mint itself
+          pairAddress: mint,
           dex: "pump.fun",
           detectedAt: Date.now(),
         });
