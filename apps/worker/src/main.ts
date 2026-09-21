@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import {
   eventBus,
   loadConfig,
@@ -23,6 +24,27 @@ import {
 } from "@clawd/router";
 
 const log = createLogger("worker:main");
+
+function startHealthServer(): () => void {
+  const port = Number(process.env.PORT ?? 10000);
+  const server = createServer((req, res) => {
+    if (req.url === "/health" || req.url === "/api/health") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        ok: true,
+        service: "clawd-research-worker",
+        tradingMode: process.env.TRADING_MODE ?? "paper",
+      }));
+      return;
+    }
+    res.writeHead(404);
+    res.end("not found");
+  });
+  server.listen(port, "0.0.0.0");
+  log.info({ port }, "Worker health server listening");
+  return () => server.close();
+}
+
 
 /** Shared Guard -> Router path for Sniper and Scout signals. */
 async function handleTradeCandidate(chain: Chain, tokenAddress: string, source: SignalSource) {
@@ -71,6 +93,7 @@ function wireEventBus(): void {
 
 async function main() {
   const cfg = loadConfig();
+  const stopHealthServer = startHealthServer();
   log.info("Starting Clawd Agents worker (Sniper/Scout -> Guard -> Router, Arbiter detection)");
 
   // Keep-alive for Render free tier web services (admin + website)
@@ -128,6 +151,7 @@ async function main() {
     stopDriftDetection();
     stopDrawdownCheck();
     stopPublishing();
+    stopHealthServer();
     process.exit(0);
   };
   process.once("SIGINT", shutdown);
