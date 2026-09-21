@@ -299,7 +299,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
               });
             }
             log.info(
-              { provider: fallback.url, recovered: missingAddresses.filter((address) => accountByAddress.get(address)).length },
+              { provider: fallback.url, recovered: missingAddresses.filter((address) => accountByAddress.get(address.toBase58())).length },
               "Pump.fun fallback RPC account recovery attempted",
             );
           } catch (err) {
@@ -312,7 +312,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         let selected: PumpCurveState | null = null;
         let selectedAddress: string | undefined;
         for (const address of addresses) {
-          const account = accountByAddress.get(address);
+          const account = accountByAddress.get(address.toBase58());
           const parsed = parsePumpCurveAccount(account);
           if (parsed) {
             selected = parsed;
