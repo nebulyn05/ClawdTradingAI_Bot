@@ -17,7 +17,8 @@
     "@clawd/scout": "*",
     "@clawd/arbiter": "*",
     "@clawd/guard": "*",
-    "@clawd/router": "*"
+    "@clawd/router": "*",
+    "@clawd/research": "*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
