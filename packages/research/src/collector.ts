@@ -89,6 +89,19 @@ async function persistObservation(opportunityId: string, observation: MarketObse
   }
 }
 
+export async function recordMarketObservation(opportunityId: string, observation: MarketObservation): Promise<void> {
+  const db = getDb();
+  const safety = await db.safetyCheck.findFirst({
+    where: { chain: observation.chain, tokenAddress: observation.tokenAddress },
+    select: { score: true, passed: true },
+  });
+  await persistObservation(
+    opportunityId,
+    observation,
+    safety ? { score: safety.score, passed: safety.passed } as SafetyCheckResult : undefined,
+  );
+}
+
 export function startResearchCollector(): () => void {
   const opportunities = new Map<string, string>();
   const safety = new Map<string, SafetyCheckResult>();
