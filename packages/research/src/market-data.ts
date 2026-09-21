@@ -285,7 +285,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         batch.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
       }
 
-      const missingAddresses = flatAddresses.filter((address) => !accountByAddress.get(address));
+      const missingAddresses = flatAddresses.filter((address) => !accountByAddress.get(address.toBase58()));
       if (missingAddresses.length > 0 && solanaFallbacks.length > 0) {
         for (const fallback of solanaFallbacks) {
           if (missingAddresses.length === 0) break;
@@ -312,7 +312,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         let selected: PumpCurveState | null = null;
         let selectedAddress: string | undefined;
         for (const address of addresses) {
-          const account = accountByAddress.get(address.toBase58());
+          const account = accountByAddress.get(address);
           const parsed = parsePumpCurveAccount(account);
           if (parsed) {
             selected = parsed;
