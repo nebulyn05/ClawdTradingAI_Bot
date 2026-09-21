@@ -12,6 +12,7 @@ import { getDb } from "@clawd/db";
 import { startSniper } from "@clawd/sniper";
 import { startScout, startKolTracking } from "@clawd/scout";
 import { startArbiter } from "@clawd/arbiter";
+import { startResearchCollector } from "@clawd/research";
 import { getOrScreenToken, startDriftDetection } from "@clawd/guard";
 import {
   openPosition,
@@ -88,6 +89,7 @@ async function main() {
   }
 
   wireEventBus();
+  const stopResearch = startResearchCollector();
   const stopSniper = startSniper();
   const stopScout = await startScout();
   const stopKolTracking = startKolTracking();
@@ -113,6 +115,7 @@ async function main() {
 
   const shutdown = () => {
     log.info("Shutting down worker...");
+    stopResearch();
     stopSniper();
     stopScout();
     stopKolTracking();
