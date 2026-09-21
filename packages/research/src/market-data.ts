@@ -2,6 +2,7 @@ import { createLogger, eventBus, type NewPairEvent } from "@clawd/core";
 import { getDb } from "@clawd/db";
 import { recordMarketObservation } from "./collector.js";
 import type { MarketObservation } from "./types.js";
+import { enrichSolanaSecurity } from "./security.js";
 
 const log = createLogger("research:market-data");
 const DEFAULT_INTERVAL_MS = 15_000;
@@ -100,8 +101,9 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           orderBy: { observedAt: "desc" },
           select: { priceUsd: true, liquidityUsd: true, observedAt: true },
         });
-        const observation = buildObservation(pair, previous ?? undefined);
+        let observation = buildObservation(pair, previous ?? undefined);
         if (!observation) return;
+        observation = await enrichSolanaSecurity(observation);
         await recordMarketObservation(opportunity.id, observation);
       } catch (err) {
         log.warn({ err, opportunityId: opportunity.id, pairAddress: opportunity.pairAddress }, "Failed to refresh Solana market data");
