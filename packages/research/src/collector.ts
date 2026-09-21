@@ -139,7 +139,9 @@ export function startResearchCollector(): () => void {
             safetyScore: result.score,
             safetyLevel: result.passed ? (result.score >= 90 ? 4 : result.score >= 75 ? 3 : result.score >= 60 ? 2 : 1) : 0,
             safetyPassed: result.passed,
-            rugIndicators: result.reasons,
+            rugIndicators: Object.entries(result.checks)
+              .filter(([, passed]) => !passed)
+              .map(([check]) => check),
           },
         });
       } catch (err) {
