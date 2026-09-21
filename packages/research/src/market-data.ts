@@ -53,7 +53,9 @@ type PumpApiCoin = {
   virtual_token_reserves?: string | number;
   real_token_reserves?: string | number;
   token_total_supply?: string | number;
+  total_supply?: string | number;
   usd_market_cap?: string | number;
+  last_trade_timestamp?: string | number;
   market_cap?: string | number;
   price_usd?: string | number;
 };
@@ -173,8 +175,13 @@ async function fetchPumpApiCoin(tokenAddress: string): Promise<PumpApiCoin | nul
     const response = await fetch(PUMP_API_BASE + "/coins-v2/" + encodeURIComponent(tokenAddress), {
       headers: { accept: "application/json" },
     });
-    if (!response.ok) return null;
-    return await response.json() as PumpApiCoin;
+    if (!response.ok) {
+      log.warn({ tokenAddress, status: response.status }, "Pump.fun HTTP coin lookup returned non-OK");
+      return null;
+    }
+    const coin = await response.json() as PumpApiCoin;
+    log.info({ tokenAddress, complete: coin.complete, bondingCurve: coin.bonding_curve, virtualSolReserves: coin.virtual_sol_reserves, virtualQuoteReserves: coin.virtual_quote_reserves, virtualTokenReserves: coin.virtual_token_reserves, realSolReserves: coin.real_sol_reserves, realQuoteReserves: coin.real_quote_reserves, totalSupply: coin.total_supply ?? coin.token_total_supply, usdMarketCap: coin.usd_market_cap }, "Pump.fun HTTP coin lookup succeeded");
+    return coin;
   } catch (err) {
     log.warn({ err, tokenAddress }, "Pump.fun HTTP coin lookup failed");
     return null;
@@ -191,11 +198,13 @@ function buildPumpApiObservation(
   const virtualToken = Number(coin.virtual_token_reserves);
   const virtualQuote = Number(coin.virtual_quote_reserves ?? coin.virtual_sol_reserves);
   const realQuote = Number(coin.real_quote_reserves ?? coin.real_sol_reserves);
-  const totalSupply = Number(coin.token_total_supply);
-  if (![virtualToken, virtualQuote, realQuote, totalSupply].every(Number.isFinite) || virtualToken <= 0 || virtualQuote <= 0) return null;
+  const totalSupply = Number(coin.total_supply ?? coin.token_total_supply);
+  if (![virtualToken, virtualQuote].every(Number.isFinite) || virtualToken <= 0 || virtualQuote <= 0) return null;
   const priceSol = virtualQuote / virtualToken;
   const priceUsd = finite(Number(coin.price_usd)) ?? (solPriceUsd !== undefined ? priceSol * solPriceUsd : undefined);
-  const liquidityUsd = solPriceUsd !== undefined ? (realQuote / LAMPORTS_PER_SOL) * solPriceUsd * 2 : undefined;
+  const liquidityUsd = solPriceUsd !== undefined && Number.isFinite(realQuote) && realQuote > 0
+    ? (realQuote / LAMPORTS_PER_SOL) * solPriceUsd * 2
+    : undefined;
   const previousPrice = previous?.priceUsd ?? undefined;
   const velocity = priceUsd !== undefined && previousPrice !== undefined && previousPrice > 0
     ? ((priceUsd / previousPrice) - 1) * 100 : undefined;
@@ -204,7 +213,7 @@ function buildPumpApiObservation(
     chain: "solana", tokenAddress,
     pairAddress: coin.bonding_curve ?? tokenAddress,
     dex: "pump.fun", observedAt: Date.now(), priceUsd,
-    liquidityUsd, marketCapUsd: apiMarketCap ?? (solPriceUsd !== undefined ? (totalSupply / (10 ** TOKEN_DECIMALS)) * priceSol * solPriceUsd : undefined),
+    liquidityUsd, marketCapUsd: apiMarketCap ?? (Number.isFinite(totalSupply) && totalSupply > 0 && solPriceUsd !== undefined ? (totalSupply / (10 ** TOKEN_DECIMALS)) * priceSol * solPriceUsd : undefined),
     liquidityChangePct: previous?.liquidityUsd && liquidityUsd !== undefined ? ((liquidityUsd / previous.liquidityUsd) - 1) * 100 : undefined,
     priceVelocityPct: velocity,
     creatorWallet: coin.creator,
