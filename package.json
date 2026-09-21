@@ -19,7 +19,8 @@
     "lint": "tsc -b --pretty",
     "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma && prisma db push --schema packages/db/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma",
-    "serve:website": "serve website -l 8080"
+    "serve:website": "serve website -l 8080",
+    "db:research-status": "node scripts/research-status.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
