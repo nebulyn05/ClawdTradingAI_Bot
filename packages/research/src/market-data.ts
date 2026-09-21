@@ -228,9 +228,13 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     // and avoids one RPC request per token.
     const curveByToken = new Map<string, PumpCurveState | null>();
     try {
-      const curveAddresses = opportunities.map((opportunity) =>
-        derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress)),
-      );
+      const curveAddresses = opportunities.map((opportunity) => {
+        const candidate = opportunity.pairAddress;
+        if (candidate && candidate !== opportunity.tokenAddress) {
+          try { return new PublicKey(candidate); } catch { /* fall through */ }
+        }
+        return derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress));
+      });
       const curveAccounts = await solana.getMultipleAccountsInfo(curveAddresses, "confirmed");
       opportunities.forEach((opportunity, index) => {
         curveByToken.set(opportunity.tokenAddress, parsePumpCurveAccount(curveAccounts[index]));
