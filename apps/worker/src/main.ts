@@ -104,7 +104,7 @@ async function main() {
       try {
         const { execFile } = await import("node:child_process");
         await new Promise<void>((resolve) => {
-          execFile("node", ["scripts/research-status.mjs"], { env: process.env }, (error, stdout, stderr) => {
+          execFile("node", ["../../scripts/research-status.mjs"], { cwd: process.cwd(), env: process.env }, (error, stdout, stderr) => {
             if (stdout) log.info({ output: stdout.trim() }, "Research database diagnostics");
             if (stderr) log.warn({ output: stderr.trim() }, "Research database diagnostics stderr");
             if (error) log.warn({ err: error.message }, "Research database diagnostics failed");
