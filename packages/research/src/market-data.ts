@@ -15,7 +15,8 @@ const SOLANA_RPC_FALLBACK_URLS = [
   "https://solana-rpc.publicnode.com",
 ].filter((url): url is string => Boolean(url) && url !== SOLANA_RPC_URL);
 const SOL_PRICE_MINT = "So11111111111111111111111111111111111111112";
-const SOL_PRICE_URL = process.env.SOL_PRICE_URL || "https://lite-api.jup.ag/price/v3?ids=" + SOL_PRICE_MINT;
+const PUMP_API_BASE = "https://frontend-api-v3.pump.fun";
+const SOL_PRICE_URL = process.env.SOL_PRICE_URL || PUMP_API_BASE + "/sol-price";
 const SOL_PRICE_FALLBACK_URLS = [
   process.env.SOL_PRICE_FALLBACK_URL,
   "https://api.coinbase.com/v2/prices/SOL-USD/spot",
@@ -117,7 +118,10 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
       const body = await response.json() as Record<string, unknown>;
 
       let price: number | undefined;
-      if (url.includes("jup.ag")) {
+      if (url.includes("pump.fun")) {
+        const value = body.solPrice ?? body.sol_price ?? body.price;
+        price = finite(Number(value));
+      } else if (url.includes("jup.ag")) {
         const value = body[SOL_PRICE_MINT] as { usdPrice?: number | string } | undefined;
         price = finite(Number(value?.usdPrice));
       } else if (url.includes("coinbase.com")) {
@@ -132,7 +136,7 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
       if (price !== undefined && price > 0) {
         cachedSolPriceUsd = price;
         cachedSolPriceAt = now;
-        log.info({ source: url.includes("jup.ag") ? "jupiter" : url.includes("coinbase.com") ? "coinbase" : "kraken", priceUsd: price }, "SOL/USD price refreshed");
+        log.info({ source: url.includes("pump.fun") ? "pump.fun" : url.includes("jup.ag") ? "jupiter" : url.includes("coinbase.com") ? "coinbase" : "kraken", priceUsd: price }, "SOL/USD price refreshed");
         return price;
       }
     } catch (err) {
@@ -146,6 +150,50 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
 function parsePumpCurveAccount(account: Awaited<ReturnType<typeof solana.getAccountInfo>> | undefined): PumpCurveState | null {
   if (!account || !account.owner.equals(PUMP_FUN_PROGRAM_ID)) return null;
   return parsePumpCurve(Buffer.from(account.data));
+}
+
+async function fetchPumpApiCoin(tokenAddress: string): Promise<PumpApiCoin | null> {
+  try {
+    const response = await fetch(PUMP_API_BASE + "/coins-v2/" + encodeURIComponent(tokenAddress), {
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    return await response.json() as PumpApiCoin;
+  } catch (err) {
+    log.warn({ err, tokenAddress }, "Pump.fun HTTP coin lookup failed");
+    return null;
+  }
+}
+
+function buildPumpApiObservation(
+  tokenAddress: string,
+  coin: PumpApiCoin,
+  solPriceUsd: number | undefined,
+  previous?: { priceUsd: number | null; liquidityUsd: number | null; observedAt: Date },
+): MarketObservation | null {
+  if (coin.complete) return null;
+  const virtualToken = Number(coin.virtual_token_reserves);
+  const virtualQuote = Number(coin.virtual_quote_reserves ?? coin.virtual_sol_reserves);
+  const realQuote = Number(coin.real_quote_reserves ?? coin.real_sol_reserves);
+  const totalSupply = Number(coin.token_total_supply);
+  if (![virtualToken, virtualQuote, realQuote, totalSupply].every(Number.isFinite) || virtualToken <= 0 || virtualQuote <= 0) return null;
+  const priceSol = virtualQuote / virtualToken;
+  const priceUsd = finite(Number(coin.price_usd)) ?? (solPriceUsd !== undefined ? priceSol * solPriceUsd : undefined);
+  const liquidityUsd = solPriceUsd !== undefined ? (realQuote / LAMPORTS_PER_SOL) * solPriceUsd * 2 : undefined;
+  const previousPrice = previous?.priceUsd ?? undefined;
+  const velocity = priceUsd !== undefined && previousPrice !== undefined && previousPrice > 0
+    ? ((priceUsd / previousPrice) - 1) * 100 : undefined;
+  const apiMarketCap = finite(Number(coin.usd_market_cap));
+  return {
+    chain: "solana", tokenAddress,
+    pairAddress: coin.bonding_curve ?? tokenAddress,
+    dex: "pump.fun", observedAt: Date.now(), priceUsd,
+    liquidityUsd, marketCapUsd: apiMarketCap ?? (solPriceUsd !== undefined ? (totalSupply / (10 ** TOKEN_DECIMALS)) * priceSol * solPriceUsd : undefined),
+    liquidityChangePct: previous?.liquidityUsd && liquidityUsd !== undefined ? ((liquidityUsd / previous.liquidityUsd) - 1) * 100 : undefined,
+    priceVelocityPct: velocity,
+    creatorWallet: coin.creator,
+    rugIndicators: [],
+  };
 }
 
 async function fetchDexPair(pairAddress: string): Promise<DexPair | null> {
@@ -367,10 +415,13 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
 
         const curve = curveByToken.get(opportunity.tokenAddress) ?? null;
         const curveAddress = curveAddressByToken.get(opportunity.tokenAddress);
-        let observation = curve
-          ? buildPumpObservation(opportunity.tokenAddress, curve, solPriceUsd, previous ?? undefined)
-          : null;
-        if (observation && curveAddress) observation.pairAddress = curveAddress;
+        const pumpApiCoin = await fetchPumpApiCoin(opportunity.tokenAddress);
+        let observation = pumpApiCoin
+          ? buildPumpApiObservation(opportunity.tokenAddress, pumpApiCoin, solPriceUsd, previous ?? undefined)
+          : curve
+            ? buildPumpObservation(opportunity.tokenAddress, curve, solPriceUsd, previous ?? undefined)
+            : null;
+        if (observation && curveAddress && observation.pairAddress === opportunity.tokenAddress) observation.pairAddress = curveAddress;
 
         if (observation) {
           const lastDexAt = dexLastEnrichment.get(opportunity.id) ?? 0;
@@ -473,7 +524,8 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun captured curve RPC probe failed");
         }
       }
-      await tick();
+      // Let the research collector finish its DB upsert before the market-data handoff runs.
+      setTimeout(() => void tick(), 1000);
     })();
   };
   const unsubscribe = eventBus.on("sniper.newPair", onPair);
