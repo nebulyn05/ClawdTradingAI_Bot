@@ -110,17 +110,9 @@ async function fetchSolPriceUsd(): Promise<number | undefined> {
   return cachedSolPriceUsd;
 }
 
-async function fetchPumpCurve(tokenAddress: string): Promise<PumpCurveState | null> {
-  try {
-    const mint = new PublicKey(tokenAddress);
-    const curveAddress = derivePumpBondingCurve(mint);
-    const account = await solana.getAccountInfo(curveAddress, "confirmed");
-    if (!account || !account.owner.equals(PUMP_FUN_PROGRAM_ID)) return null;
-    return parsePumpCurve(Buffer.from(account.data));
-  } catch (err) {
-    log.debug({ err, tokenAddress }, "Pump.fun bonding curve unavailable");
-    return null;
-  }
+function parsePumpCurveAccount(account: Awaited<ReturnType<typeof solana.getAccountInfo>>): PumpCurveState | null {
+  if (!account || !account.owner.equals(PUMP_FUN_PROGRAM_ID)) return null;
+  return parsePumpCurve(Buffer.from(account.data));
 }
 
 async function fetchDexPair(pairAddress: string): Promise<DexPair | null> {
@@ -230,6 +222,23 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
       where: { chain: "solana" }, orderBy: { detectedAt: "desc" }, take: maxPairsPerTick,
     });
     const solPriceUsd = await fetchSolPriceUsd();
+
+    // Read all Pump.fun bonding curves in one RPC request. Solana supports
+    // batched account reads, which is important for a 15-second research loop
+    // and avoids one RPC request per token.
+    const curveByToken = new Map<string, PumpCurveState | null>();
+    try {
+      const curveAddresses = opportunities.map((opportunity) =>
+        derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress)),
+      );
+      const curveAccounts = await solana.getMultipleAccountsInfo(curveAddresses, "confirmed");
+      opportunities.forEach((opportunity, index) => {
+        curveByToken.set(opportunity.tokenAddress, parsePumpCurveAccount(curveAccounts[index]));
+      });
+    } catch (err) {
+      log.warn({ err, opportunities: opportunities.length }, "Failed to batch-read Pump.fun bonding curves");
+    }
+
     let skippedNoPairAddress = 0;
     let refreshed = 0;
     let onChainOnly = 0;
@@ -251,7 +260,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           select: { priceUsd: true, liquidityUsd: true, observedAt: true },
         });
 
-        const curve = await fetchPumpCurve(opportunity.tokenAddress);
+        const curve = curveByToken.get(opportunity.tokenAddress) ?? null;
         let observation = curve
           ? buildPumpObservation(opportunity.tokenAddress, curve, solPriceUsd, previous ?? undefined)
           : null;
@@ -325,6 +334,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
 
     log.info({
       opportunities: opportunities.length,
+      curveAccountsRead: curveByToken.size,
       refreshed,
       onChainOnly,
       dexEnriched,
