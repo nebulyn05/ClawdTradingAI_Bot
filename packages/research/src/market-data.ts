@@ -31,11 +31,23 @@ function pickPeriod<T>(value: Record<string, T> | undefined, period: string): T 
 }
 
 async function fetchPair(pairAddress: string): Promise<DexPair | null> {
-  const url = DEXSCREENER_BASE + "/latest/dex/pairs/solana/" + encodeURIComponent(pairAddress);
-  const response = await fetch(url, { headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error("DEX Screener HTTP " + response.status);
-  const body = (await response.json()) as { pairs?: DexPair[] | null };
-  return body.pairs?.[0] ?? null;
+  const headers = { accept: "application/json" };
+
+  // Pump.fun emits the mint as pairAddress. DEX Screener's pair endpoint
+  // expects an actual pool/pair address, so fall back to token lookup when
+  // the direct pair lookup returns no pair.
+  const pairUrl = DEXSCREENER_BASE + "/latest/dex/pairs/solana/" + encodeURIComponent(pairAddress);
+  const pairResponse = await fetch(pairUrl, { headers });
+  if (!pairResponse.ok) throw new Error("DEX Screener pair HTTP " + pairResponse.status);
+  const pairBody = (await pairResponse.json()) as { pairs?: DexPair[] | null };
+  const directPair = pairBody.pairs?.[0];
+  if (directPair) return directPair;
+
+  const tokenUrl = DEXSCREENER_BASE + "/latest/dex/tokens/" + encodeURIComponent(pairAddress);
+  const tokenResponse = await fetch(tokenUrl, { headers });
+  if (!tokenResponse.ok) throw new Error("DEX Screener token HTTP " + tokenResponse.status);
+  const tokenBody = (await tokenResponse.json()) as { pairs?: DexPair[] | null };
+  return tokenBody.pairs?.find((candidate) => candidate.chainId === "solana") ?? tokenBody.pairs?.[0] ?? null;
 }
 
 function buildObservation(pair: DexPair, previous?: { priceUsd: number | null; liquidityUsd: number | null; observedAt: Date }): MarketObservation | null {
@@ -90,12 +102,24 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     const opportunities = await db.researchOpportunity.findMany({
       where: { chain: "solana" }, orderBy: { detectedAt: "desc" }, take: maxPairsPerTick,
     });
+    let skippedNoPairAddress = 0;
+    let refreshed = 0;
+    let noDexPair = 0;
+    let failures = 0;
+
     await Promise.allSettled(opportunities.map(async (opportunity) => {
-      if (!opportunity.pairAddress || running.has(opportunity.id)) return;
+      if (!opportunity.pairAddress) {
+        skippedNoPairAddress += 1;
+        return;
+      }
+      if (running.has(opportunity.id)) return;
       running.add(opportunity.id);
       try {
         const pair = await fetchPair(opportunity.pairAddress);
-        if (!pair) return;
+        if (!pair) {
+          noDexPair += 1;
+          return;
+        }
         const previous = await db.researchObservation.findFirst({
           where: { opportunityId: opportunity.id, priceUsd: { not: null } },
           orderBy: { observedAt: "desc" },
@@ -105,10 +129,20 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         if (!observation) return;
         observation = await enrichSolanaSecurity(observation);
         await recordMarketObservation(opportunity.id, observation);
+        refreshed += 1;
       } catch (err) {
+        failures += 1;
         log.warn({ err, opportunityId: opportunity.id, pairAddress: opportunity.pairAddress }, "Failed to refresh Solana market data");
       } finally { running.delete(opportunity.id); }
     }));
+
+    log.info({
+      opportunities: opportunities.length,
+      refreshed,
+      noDexPair,
+      skippedNoPairAddress,
+      failures,
+    }, "Solana market-data tick");
   };
 
   const onPair = (_pair: NewPairEvent) => { void tick(); };
