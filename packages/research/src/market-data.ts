@@ -7,12 +7,13 @@ import { enrichSolanaSecurity } from "./security.js";
 
 const log = createLogger("research:market-data");
 const DEFAULT_INTERVAL_MS = 15_000;
+const DEFAULT_MAX_PAIRS_PER_TICK = 20;
+const PUMP_API_TIMEOUT_MS = 4_000;
 const DEXSCREENER_BASE = "https://api.dexscreener.com";
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet.solana.com";
 const SOLANA_RPC_FALLBACK_URLS = [
   process.env.SOLANA_RPC_FALLBACK_URL,
   "https://api.mainnet-beta.solana.com",
-  "https://solana-rpc.publicnode.com",
 ].filter((url): url is string => Boolean(url) && url !== SOLANA_RPC_URL);
 const SOL_PRICE_MINT = "So11111111111111111111111111111111111111112";
 const PUMP_API_BASE = "https://frontend-api-v3.pump.fun";
@@ -172,9 +173,13 @@ function parsePumpCurveAccount(account: Awaited<ReturnType<typeof solana.getAcco
 
 async function fetchPumpApiCoin(tokenAddress: string): Promise<PumpApiCoin | null> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PUMP_API_TIMEOUT_MS);
     const response = await fetch(PUMP_API_BASE + "/coins-v2/" + encodeURIComponent(tokenAddress), {
       headers: { accept: "application/json" },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!response.ok) {
       log.warn({ tokenAddress, status: response.status }, "Pump.fun HTTP coin lookup returned non-OK");
       return null;
@@ -315,7 +320,7 @@ export interface MarketDataCollectorConfig {
 
 export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig = {}): () => void {
   const intervalMs = config.intervalMs ?? DEFAULT_INTERVAL_MS;
-  const maxPairsPerTick = config.maxPairsPerTick ?? 100;
+  const maxPairsPerTick = config.maxPairsPerTick ?? DEFAULT_MAX_PAIRS_PER_TICK;
   const maxDexEnrichmentsPerTick = config.maxDexEnrichmentsPerTick ?? 3;
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | undefined;
