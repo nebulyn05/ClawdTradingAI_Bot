@@ -28,6 +28,13 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 const TOKEN_DECIMALS = 6;
 const SOL_PRICE_TTL_MS = 60_000;
 const DEX_ENRICHMENT_TTL_MS = 60_000;
+// Pump.fun's current Global config initializes every new SOL bonding curve
+// with these reserves. We use them only for a freshly decoded launch when the
+// public RPC cannot immediately return the newly-created curve account.
+const INITIAL_VIRTUAL_TOKEN_RESERVES = 1_073_000_000_000_000n;
+const INITIAL_VIRTUAL_SOL_RESERVES = 30_000_000_000n;
+const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n;
+const INITIAL_TOKEN_TOTAL_SUPPLY = 1_000_000_000_000_000n;
 
 type DexPair = {
   chainId?: string;
@@ -350,6 +357,8 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
   // create instruction. This avoids depending on a DB round-trip during the
   // first few seconds of a launch and gives us a precise RPC probe target.
   const capturedCurveByToken = new Map<string, string>();
+  const liveCurveByToken = new Map<string, PumpCurveState>();
+  const curveSubscriptions = new Map<string, number>();
 
   const tick = async () => {
     if (stopped) return;
@@ -464,14 +473,11 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           select: { priceUsd: true, liquidityUsd: true, observedAt: true },
         });
 
-        const curve = curveByToken.get(opportunity.tokenAddress) ?? null;
-        const curveAddress = curveAddressByToken.get(opportunity.tokenAddress);
-        const pumpApiCoin = await fetchPumpApiCoin(opportunity.tokenAddress);
-        let observation = pumpApiCoin
-          ? buildPumpApiObservation(opportunity.tokenAddress, pumpApiCoin, solPriceUsd, previous ?? undefined)
-          : curve
-            ? buildPumpObservation(opportunity.tokenAddress, curve, solPriceUsd, previous ?? undefined)
-            : null;
+        const curve = curveByToken.get(opportunity.tokenAddress) ?? liveCurveByToken.get(opportunity.tokenAddress) ?? null;
+        const curveAddress = curveAddressByToken.get(opportunity.tokenAddress) ?? capturedCurveByToken.get(opportunity.tokenAddress);
+        let observation = curve
+          ? buildPumpObservation(opportunity.tokenAddress, curve, solPriceUsd, previous ?? undefined)
+          : null;
         if (observation && curveAddress && observation.pairAddress === opportunity.tokenAddress) observation.pairAddress = curveAddress;
 
         if (observation) {
@@ -557,23 +563,55 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
 
   const onPair = (pair: NewPairEvent) => {
     if (pair.chain !== "solana") return;
-    if (pair.pairAddress && pair.pairAddress !== pair.tokenAddress) {
-      capturedCurveByToken.set(pair.tokenAddress, pair.pairAddress);
+    if (!pair.pairAddress || pair.pairAddress === pair.tokenAddress) return;
+
+    capturedCurveByToken.set(pair.tokenAddress, pair.pairAddress);
+
+    // Seed a brand-new curve from Pump.fun's current Global initialization
+    // values. This is only used for this fresh launch; older opportunities are
+    // never assigned a synthetic state. A later account-change notification
+    // replaces it with the exact on-chain reserves.
+    liveCurveByToken.set(pair.tokenAddress, {
+      virtualTokenReserves: INITIAL_VIRTUAL_TOKEN_RESERVES,
+      virtualSolReserves: INITIAL_VIRTUAL_SOL_RESERVES,
+      realTokenReserves: INITIAL_REAL_TOKEN_RESERVES,
+      realSolReserves: 0n,
+      tokenTotalSupply: INITIAL_TOKEN_TOTAL_SUPPLY,
+      complete: false,
+      creator: "",
+    });
+
+    try {
+      const curveKey = new PublicKey(pair.pairAddress);
+      if (!curveSubscriptions.has(pair.tokenAddress)) {
+        void solana.onAccountChange(curveKey, (accountInfo) => {
+          const parsed = parsePumpCurve(Buffer.from(accountInfo.data));
+          if (!parsed) {
+            log.warn({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, dataLength: accountInfo.data.length, owner: accountInfo.owner.toBase58() }, "Pump.fun curve account update could not be parsed");
+            return;
+          }
+          liveCurveByToken.set(pair.tokenAddress, parsed);
+          log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, virtualSolReserves: parsed.virtualSolReserves.toString(), virtualTokenReserves: parsed.virtualTokenReserves.toString(), realSolReserves: parsed.realSolReserves.toString(), realTokenReserves: parsed.realTokenReserves.toString(), complete: parsed.complete }, "Pump.fun bonding curve update received");
+          void tick();
+        }, "processed").then((subscriptionId) => {
+          curveSubscriptions.set(pair.tokenAddress, subscriptionId);
+          log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, subscriptionId }, "Pump.fun bonding curve subscription active");
+        }).catch((err) => {
+          log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun bonding curve subscription failed");
+        });
+      }
+    } catch (err) {
+      log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun bonding curve subscription setup failed");
     }
+
     void (async () => {
-      if (pair.pairAddress && pair.pairAddress !== pair.tokenAddress) {
-        try {
-          const account = await solana.getAccountInfo(new PublicKey(pair.pairAddress), "processed");
-          log.info({
-            tokenAddress: pair.tokenAddress,
-            pairAddress: pair.pairAddress,
-            accountFound: Boolean(account),
-            dataLength: account?.data.length,
-            owner: account?.owner.toBase58(),
-          }, "Pump.fun captured curve RPC probe");
-        } catch (err) {
-          log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun captured curve RPC probe failed");
-        }
+      try {
+        const account = await solana.getAccountInfo(new PublicKey(pair.pairAddress), "processed");
+        const parsed = parsePumpCurveAccount(account);
+        if (parsed) liveCurveByToken.set(pair.tokenAddress, parsed);
+        log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, accountFound: Boolean(account), parsed: Boolean(parsed), dataLength: account?.data.length, owner: account?.owner.toBase58() }, "Pump.fun captured curve RPC probe");
+      } catch (err) {
+        log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun captured curve RPC probe failed");
       }
       // Let the research collector finish its DB upsert before the market-data handoff runs.
       setTimeout(() => void tick(), 1000);
@@ -583,5 +621,13 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
   void tick();
   timer = setInterval(() => void tick(), intervalMs);
   log.info({ intervalMs, maxPairsPerTick, maxDexEnrichmentsPerTick }, "Solana market-data collector started");
-  return () => { stopped = true; unsubscribe(); if (timer) clearInterval(timer); };
+  return () => {
+    stopped = true;
+    unsubscribe();
+    if (timer) clearInterval(timer);
+    for (const subscriptionId of curveSubscriptions.values()) {
+      void solana.removeAccountChangeListener(subscriptionId).catch((err) => log.warn({ err, subscriptionId }, "Pump.fun curve subscription cleanup failed"));
+    }
+    curveSubscriptions.clear();
+  };
 }
