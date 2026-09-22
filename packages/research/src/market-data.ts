@@ -391,7 +391,9 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
       // null for a very recent account even though the transaction is confirmed.
       // Read in <=100-key batches, then retry missing accounts against fallback
       // RPCs before declaring a bonding curve unavailable.
-      const BATCH_SIZE = 100;
+      // QuickNode Discover/free currently limits getMultipleAccounts to 5 accounts.
+      // Keep every batch within that provider limit instead of requiring an upgrade.
+      const BATCH_SIZE = 5;
       for (let offset = 0; offset < flatAddresses.length; offset += BATCH_SIZE) {
         const batch = flatAddresses.slice(offset, offset + BATCH_SIZE);
         const accounts = await solana.getMultipleAccountsInfo(batch, "confirmed");
