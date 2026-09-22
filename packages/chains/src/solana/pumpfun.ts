@@ -7,6 +7,8 @@ const log = createLogger("chains:solana:pumpfun");
 // Pump.fun's program ID (mainnet + devnet share this address).
 const PUMP_FUN_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Subscribes to Pump.fun token creation events via log subscription.
  *
@@ -18,26 +20,57 @@ export function watchPumpFunLaunches(
   connection: Connection,
   onEvent: (pair: NewPairEvent) => void,
 ): () => void {
-  const seenSignatures = new Set<string>();
+  const processedSignatures = new Set<string>();
+  const inFlightSignatures = new Set<string>();
+
+  const rememberProcessed = (signature: string) => {
+    processedSignatures.add(signature);
+    if (processedSignatures.size > 5000) {
+      const oldest = processedSignatures.values().next().value as string | undefined;
+      if (oldest) processedSignatures.delete(oldest);
+    }
+  };
 
   const decodeTransaction = async (signature: string, source: "logs" | "poll") => {
-    if (seenSignatures.has(signature)) return;
-    seenSignatures.add(signature);
-    if (seenSignatures.size > 5000) {
-      const oldest = seenSignatures.values().next().value as string | undefined;
-      if (oldest) seenSignatures.delete(oldest);
-    }
+    if (processedSignatures.has(signature) || inFlightSignatures.has(signature)) return;
+    inFlightSignatures.add(signature);
 
     try {
-      const tx = await connection.getTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-      });
-      if (!tx) return;
+      let tx = null;
+      let lastError: unknown = null;
+
+      // Public Solana RPCs can briefly return 429 for transaction lookups.
+      // Retry without marking the signature as processed so a later poll can
+      // recover a launch that could not be decoded on the first attempt.
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          tx = await connection.getTransaction(signature, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+          });
+          if (tx) break;
+        } catch (err) {
+          lastError = err;
+          if (attempt < 3) await sleep(attempt * 750);
+        }
+      }
+
+      if (!tx) {
+        log.warn(
+          { signature, source, err: lastError },
+          "Pump.fun transaction lookup unavailable; will retry later",
+        );
+        return;
+      }
 
       const logs = tx.meta?.logMessages ?? [];
       const isCreate = logs.some(
         (line) => line.includes("Instruction: Create") || line.includes("Instruction: CreateV2"),
       );
+
+      // We successfully inspected this transaction, so it is safe to suppress
+      // future retries even when it was not a token creation.
+      rememberProcessed(signature);
       if (!isCreate) return;
 
       const message = tx.transaction.message;
@@ -55,6 +88,9 @@ export function watchPumpFunLaunches(
           { signature, source },
           "Pump.fun transaction referenced an unavailable address lookup table",
         );
+        // The transaction itself was decoded, but its account keys are not
+        // currently resolvable. Keep it eligible for a future retry.
+        processedSignatures.delete(signature);
         return;
       }
 
@@ -108,7 +144,11 @@ export function watchPumpFunLaunches(
         detectedAt: Date.now(),
       });
     } catch (err) {
+      // Do not permanently consume the signature after a transient failure.
+      processedSignatures.delete(signature);
       log.warn({ err, signature, source }, "Failed to parse Pump.fun create tx");
+    } finally {
+      inFlightSignatures.delete(signature);
     }
   };
 
@@ -134,22 +174,28 @@ export function watchPumpFunLaunches(
     if (polling) return;
     polling = true;
     try {
-      const signatures = await connection.getSignaturesForAddress(PUMP_FUN_PROGRAM_ID, {
-        limit: 25,
-      }, "confirmed");
+      const signatures = await connection.getSignaturesForAddress(
+        PUMP_FUN_PROGRAM_ID,
+        { limit: 10 },
+        "confirmed",
+      );
 
       const unseen = signatures
         .map((entry) => entry.signature)
-        .filter((signature) => !seenSignatures.has(signature));
+        .filter(
+          (signature) =>
+            !processedSignatures.has(signature) && !inFlightSignatures.has(signature),
+        );
 
-      log.debug(
+      // Keep this as a low-frequency recovery path. The websocket log
+      // subscription is the primary detector; polling only recovers events
+      // missed by the subscription.
+      log.info(
         { recentProgramSignatures: signatures.length, unseenProgramSignatures: unseen.length },
         "Pump.fun launch poll",
       );
 
-      // HTTP polling is an independent detection path from websocket logs.
-      // Keep the batch deliberately small to avoid hammering public RPCs.
-      for (const signature of unseen.slice(0, 8)) {
+      for (const signature of unseen.slice(0, 2)) {
         await decodeTransaction(signature, "poll");
       }
     } catch (err) {
@@ -161,7 +207,7 @@ export function watchPumpFunLaunches(
 
   const pollTimer = setInterval(() => {
     void poll();
-  }, 3000);
+  }, 10_000);
 
   void poll();
 
