@@ -172,27 +172,48 @@ function parsePumpCurveAccount(account: Awaited<ReturnType<typeof solana.getAcco
 }
 
 async function fetchPumpApiCoin(tokenAddress: string): Promise<PumpApiCoin | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), PUMP_API_TIMEOUT_MS);
-    const response = await fetch(PUMP_API_BASE + "/coins-v2/" + encodeURIComponent(tokenAddress), {
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!response.ok) {
-      log.warn({ tokenAddress, status: response.status }, "Pump.fun HTTP coin lookup returned non-OK");
-      return null;
-    }
-    const coin = await response.json() as PumpApiCoin;
-    log.info({ tokenAddress, complete: coin.complete, bondingCurve: coin.bonding_curve, virtualSolReserves: coin.virtual_sol_reserves, virtualQuoteReserves: coin.virtual_quote_reserves, virtualTokenReserves: coin.virtual_token_reserves, realSolReserves: coin.real_sol_reserves, realQuoteReserves: coin.real_quote_reserves, totalSupply: coin.total_supply ?? coin.token_total_supply, usdMarketCap: coin.usd_market_cap }, "Pump.fun HTTP coin lookup succeeded");
-    return coin;
-  } catch (err) {
-    log.warn({ err, tokenAddress }, "Pump.fun HTTP coin lookup failed");
-    return null;
-  }
-}
+  const urls = [
+    `${PUMP_API_BASE}/coins-v2/${encodeURIComponent(tokenAddress)}`,
+    `${PUMP_API_BASE}/coins/${encodeURIComponent(tokenAddress)}`,
+  ];
 
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), PUMP_API_TIMEOUT_MS);
+      const response = await fetch(url, {
+        headers: { accept: "application/json" },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        log.warn({ tokenAddress, url, status: response.status }, "Pump.fun HTTP coin lookup returned non-OK");
+        continue;
+      }
+
+      const coin = await response.json() as PumpApiCoin;
+      log.info({
+        tokenAddress,
+        url,
+        complete: coin.complete,
+        bondingCurve: coin.bonding_curve,
+        virtualSolReserves: coin.virtual_sol_reserves,
+        virtualQuoteReserves: coin.virtual_quote_reserves,
+        virtualTokenReserves: coin.virtual_token_reserves,
+        realSolReserves: coin.real_sol_reserves,
+        realQuoteReserves: coin.real_quote_reserves,
+        totalSupply: coin.total_supply ?? coin.token_total_supply,
+        usdMarketCap: coin.usd_market_cap,
+      }, "Pump.fun HTTP coin lookup succeeded");
+      return coin;
+    } catch (err) {
+      log.warn({ err, tokenAddress, url }, "Pump.fun HTTP coin lookup failed");
+    }
+  }
+
+  return null;
+}
 function buildPumpApiObservation(
   tokenAddress: string,
   coin: PumpApiCoin,
