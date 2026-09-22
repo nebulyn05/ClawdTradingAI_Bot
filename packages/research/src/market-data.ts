@@ -584,7 +584,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     try {
       const curveKey = new PublicKey(pair.pairAddress);
       if (!curveSubscriptions.has(pair.tokenAddress)) {
-        void solana.onAccountChange(curveKey, (accountInfo) => {
+        const subscriptionId = solana.onAccountChange(curveKey, (accountInfo) => {
           const parsed = parsePumpCurve(Buffer.from(accountInfo.data));
           if (!parsed) {
             log.warn({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, dataLength: accountInfo.data.length, owner: accountInfo.owner.toBase58() }, "Pump.fun curve account update could not be parsed");
@@ -593,12 +593,9 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           liveCurveByToken.set(pair.tokenAddress, parsed);
           log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, virtualSolReserves: parsed.virtualSolReserves.toString(), virtualTokenReserves: parsed.virtualTokenReserves.toString(), realSolReserves: parsed.realSolReserves.toString(), realTokenReserves: parsed.realTokenReserves.toString(), complete: parsed.complete }, "Pump.fun bonding curve update received");
           void tick();
-        }, "processed").then((subscriptionId) => {
-          curveSubscriptions.set(pair.tokenAddress, subscriptionId);
-          log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, subscriptionId }, "Pump.fun bonding curve subscription active");
-        }).catch((err) => {
-          log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun bonding curve subscription failed");
-        });
+        }, "processed");
+        curveSubscriptions.set(pair.tokenAddress, subscriptionId);
+        log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, subscriptionId }, "Pump.fun bonding curve subscription active");
       }
     } catch (err) {
       log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun bonding curve subscription setup failed");
