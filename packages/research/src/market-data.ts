@@ -11,6 +11,7 @@ const DEFAULT_MAX_PAIRS_PER_TICK = 20;
 const PUMP_API_TIMEOUT_MS = 4_000;
 const DEXSCREENER_BASE = "https://api.dexscreener.com";
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet.solana.com";
+const SOLANA_WS_URL = process.env.SOLANA_WS_URL || "";
 const SOLANA_RPC_FALLBACK_URLS = [
   process.env.SOLANA_RPC_FALLBACK_URL,
   "https://api.mainnet-beta.solana.com",
@@ -78,7 +79,11 @@ type PumpCurveState = {
   creator: string;
 };
 
-const solana = new Connection(SOLANA_RPC_URL, "confirmed");
+const solana = new Connection(
+  SOLANA_RPC_URL,
+  "confirmed",
+  SOLANA_WS_URL ? { wsEndpoint: SOLANA_WS_URL } : undefined,
+);
 const solanaFallbacks = SOLANA_RPC_FALLBACK_URLS.map((url) => ({
   url,
   connection: new Connection(url, "confirmed"),
