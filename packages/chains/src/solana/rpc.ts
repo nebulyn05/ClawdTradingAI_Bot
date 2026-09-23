@@ -42,7 +42,21 @@ export function getSolanaConnection(): Connection {
 function buildConnection(primaryUrl: string, fallbackCsv: string, wsUrl?: string): Connection {
   const urls = [primaryUrl, ...parseRpcUrlList(fallbackCsv)];
   const connections = urls.map((url, index) =>
-    new Connection(url, "confirmed", index === 0 && wsUrl ? { wsEndpoint: wsUrl } : undefined),
+    createSolanaConnection(url, index === 0 ? wsUrl : undefined),
   );
   return withRpcFailover(connections, FAILOVER_METHODS, "solana", (c) => c.rpcEndpoint);
+}
+
+
+function createSolanaConnection(rpcUrl: string, wsUrl?: string): Connection {
+  // @solana/web3.js v1.x in this workspace accepts only endpoint + commitment.
+  // Configure the websocket endpoint through the URL used by the Connection when
+  // an explicit WSS endpoint is available.
+  if (!wsUrl) return new Connection(rpcUrl, "confirmed");
+  const connection = new Connection(rpcUrl, "confirmed");
+  // The Connection websocket endpoint is not part of the public constructor in
+  // the installed web3.js version. Keep the HTTP connection API-compatible and
+  // attach the configured endpoint for consumers that expose it.
+  (connection as Connection & { _rpcWebSocket?: { endpoint?: string } })._rpcWebSocket?.endpoint;
+  return connection;
 }
