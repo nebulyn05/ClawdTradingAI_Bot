@@ -588,22 +588,9 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
     });
 
     try {
-      const capturedCurveKey = new PublicKey(pair.pairAddress);
-      const [derivedCurveKey] = PublicKey.findProgramAddressSync(
-        [Buffer.from("bonding-curve"), new PublicKey(pair.tokenAddress).toBuffer()],
-        new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"),
-      );
-      log.info(
-        {
-          tokenAddress: pair.tokenAddress,
-          capturedCurve: pair.pairAddress,
-          derivedCurve: derivedCurveKey.toBase58(),
-          capturedMatchesDerived: capturedCurveKey.equals(derivedCurveKey),
-        },
-        "Pump.fun bonding curve address validation",
-      );
+      const curveKey = new PublicKey(pair.pairAddress);
       if (!curveSubscriptions.has(pair.tokenAddress)) {
-        const subscriptionId = solana.onAccountChange(capturedCurveKey, (accountInfo) => {
+        const subscriptionId = solana.onAccountChange(curveKey, (accountInfo) => {
           const parsed = parsePumpCurve(Buffer.from(accountInfo.data));
           if (!parsed) {
             log.warn({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, dataLength: accountInfo.data.length, owner: accountInfo.owner.toBase58() }, "Pump.fun curve account update could not be parsed");
@@ -622,27 +609,10 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
 
     void (async () => {
       try {
-        const capturedAccount = await solana.getAccountInfo(capturedCurveKey, "processed");
-        const derivedAccount = capturedCurveKey.equals(derivedCurveKey)
-          ? capturedAccount
-          : await solana.getAccountInfo(derivedCurveKey, "processed");
-        const parsed = parsePumpCurveAccount(capturedAccount) ?? parsePumpCurveAccount(derivedAccount);
+        const account = await solana.getAccountInfo(new PublicKey(pair.pairAddress), "processed");
+        const parsed = parsePumpCurveAccount(account);
         if (parsed) liveCurveByToken.set(pair.tokenAddress, parsed);
-        log.info(
-          {
-            tokenAddress: pair.tokenAddress,
-            capturedCurve: pair.pairAddress,
-            derivedCurve: derivedCurveKey.toBase58(),
-            capturedAccountFound: Boolean(capturedAccount),
-            capturedOwner: capturedAccount?.owner.toBase58(),
-            capturedDataLength: capturedAccount?.data.length,
-            derivedAccountFound: Boolean(derivedAccount),
-            derivedOwner: derivedAccount?.owner.toBase58(),
-            derivedDataLength: derivedAccount?.data.length,
-            parsed: Boolean(parsed),
-          },
-          "Pump.fun captured curve RPC probe",
-        );
+        log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, accountFound: Boolean(account), parsed: Boolean(parsed), dataLength: account?.data.length, owner: account?.owner.toBase58() }, "Pump.fun captured curve RPC probe");
       } catch (err) {
         log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun captured curve RPC probe failed");
       }
