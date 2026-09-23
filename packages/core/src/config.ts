@@ -80,6 +80,8 @@ const envSchema = z.object({
   HELIUS_API_KEY: z.string().optional().default(""),
   SOLANA_DEVNET_RPC_URL: z.string().default("https://api.devnet.solana.com"),
   SOLANA_MAINNET_RPC_URL: z.string().optional().default(""),
+  SOLANA_MAINNET_WS_URL: z.string().optional().default(""),
+  SOLANA_DEVNET_WS_URL: z.string().optional().default(""),
   // Comma-separated secondary RPC endpoints — a request that fails against
   // the primary above retries against these, in order, before failing the
   // whole call (see packages/chains/src/rpc-failover.ts). Optional; no
