@@ -42,7 +42,7 @@ export function getSolanaConnection(): Connection {
 function buildConnection(primaryUrl: string, fallbackCsv: string, wsUrl?: string): Connection {
   const urls = [primaryUrl, ...parseRpcUrlList(fallbackCsv)];
   const connections = urls.map((url, index) =>
-    new Connection(url, "confirmed"),
+    new Connection(url, index === 0 && wsUrl ? { commitment: "confirmed", wsEndpoint: wsUrl } : "confirmed"),
   );
   return withRpcFailover(connections, FAILOVER_METHODS, "solana", (c) => c.rpcEndpoint);
 }
