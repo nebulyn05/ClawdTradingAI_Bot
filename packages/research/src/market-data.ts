@@ -79,11 +79,7 @@ type PumpCurveState = {
   creator: string;
 };
 
-const solana = new Connection(
-  SOLANA_RPC_URL,
-  "confirmed",
-  SOLANA_WS_URL ? { wsEndpoint: SOLANA_WS_URL } : undefined,
-);
+const solana = new Connection(SOLANA_RPC_URL, "confirmed");
 const solanaFallbacks = SOLANA_RPC_FALLBACK_URLS.map((url) => ({
   url,
   connection: new Connection(url, "confirmed"),
