@@ -24,6 +24,7 @@ export function getSolanaConnection(): Connection {
 
   if (network === "mainnet") {
     const rpcUrl =
+      process.env.SOLANA_RPC_URL ||
       cfg.SOLANA_MAINNET_RPC_URL ||
       (cfg.HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${cfg.HELIUS_API_KEY}` : "");
     if (!rpcUrl) {
@@ -31,15 +32,17 @@ export function getSolanaConnection(): Connection {
         "Solana is set to mainnet but neither SOLANA_MAINNET_RPC_URL nor HELIUS_API_KEY is set.",
       );
     }
-    return buildConnection(rpcUrl, cfg.SOLANA_MAINNET_RPC_FALLBACK_URLS);
+    return buildConnection(rpcUrl, cfg.SOLANA_MAINNET_RPC_FALLBACK_URLS, process.env.SOLANA_WS_URL || cfg.SOLANA_MAINNET_WS_URL);
   }
 
-  return buildConnection(cfg.SOLANA_DEVNET_RPC_URL, cfg.SOLANA_DEVNET_RPC_FALLBACK_URLS);
+  return buildConnection(cfg.SOLANA_DEVNET_RPC_URL, cfg.SOLANA_DEVNET_RPC_FALLBACK_URLS, cfg.SOLANA_DEVNET_WS_URL);
 }
 
 /** Builds a single Connection when no fallback URLs are configured (the common case, opt-in redundancy), or a failover-wrapped one otherwise. */
-function buildConnection(primaryUrl: string, fallbackCsv: string): Connection {
+function buildConnection(primaryUrl: string, fallbackCsv: string, wsUrl?: string): Connection {
   const urls = [primaryUrl, ...parseRpcUrlList(fallbackCsv)];
-  const connections = urls.map((url) => new Connection(url, "confirmed"));
+  const connections = urls.map((url, index) =>
+    new Connection(url, "confirmed", index === 0 && wsUrl ? { wsEndpoint: wsUrl } : undefined),
+  );
   return withRpcFailover(connections, FAILOVER_METHODS, "solana", (c) => c.rpcEndpoint);
 }
