@@ -6,7 +6,7 @@
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc -b",
-    "start": "node dist/main.js"
+    "start": "npx prisma migrate deploy --schema ../../packages/db/prisma/schema.prisma && node dist/main.js"
   },
   "dependencies": {
     "@clawd/core": "*",
