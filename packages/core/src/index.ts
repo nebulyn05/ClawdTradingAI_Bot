@@ -5,3 +5,4 @@ export * from "./event-bus.js";
 export * from "./redis-bridge.js";
 export * from "./settings.js";
 export * from "./keep-alive.js";
+export * from "./rpc-limiter.js";
