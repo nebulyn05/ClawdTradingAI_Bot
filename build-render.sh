@@ -6,7 +6,10 @@ echo " Clawd Agents - Render Build"
 echo "========================================"
 
 echo "📦 Installing dependencies..."
-npm ci
+# The research branch currently has a workspace package that is not yet
+# reflected in package-lock.json. npm install repairs the lockfile during
+# the Render build; npm ci would fail before the application is built.
+npm install
 
 echo "🧹 Cleaning TypeScript build artifacts..."
 find . -type d \( -name dist -o -name .turbo \) -prune -exec rm -rf {} +
