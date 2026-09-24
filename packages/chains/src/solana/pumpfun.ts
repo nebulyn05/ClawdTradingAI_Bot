@@ -84,8 +84,13 @@ export function watchPumpFunLaunches(
 
       const lookupAccounts = await Promise.all(
         lookupTables.map(async (lookup) => {
-          const result = await withRpcRetry(() => connection.getAddressLookupTable(lookup.accountKey), rpcLimiter, 3);
-          return result.value;
+          try {
+            const result = await withRpcRetry(() => connection.getAddressLookupTable(lookup.accountKey), rpcLimiter, 3);
+            return result.value;
+          } catch {
+            const fallbackResult = await fallback.getAddressLookupTable(lookup.accountKey);
+            return fallbackResult.value;
+          }
         }),
       );
 
