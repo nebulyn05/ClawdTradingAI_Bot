@@ -399,14 +399,21 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
       // QuickNode Discover/free currently limits getMultipleAccounts to 5 accounts.
       // Keep every batch within that provider limit instead of requiring an upgrade.
       const BATCH_SIZE = 5;
+      let primaryRpcFailed = false;
       for (let offset = 0; offset < flatAddresses.length; offset += BATCH_SIZE) {
         const batch = flatAddresses.slice(offset, offset + BATCH_SIZE);
-        const accounts = await withRpcRetry(() => solana.getMultipleAccountsInfo(batch, "confirmed"), rpcLimiter);
-        batch.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
+        try {
+          const accounts = await withRpcRetry(() => solana.getMultipleAccountsInfo(batch, "confirmed"), rpcLimiter);
+          batch.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
+        } catch (err) {
+          primaryRpcFailed = true;
+          log.warn({ err }, "Primary Solana RPC unavailable; switching market-data reads to fallback RPC");
+          break;
+        }
       }
 
       const missingAddresses = flatAddresses.filter((address) => !accountByAddress.get(address.toBase58()));
-      if (missingAddresses.length > 0 && solanaFallbacks.length > 0) {
+      if ((primaryRpcFailed || missingAddresses.length > 0) && solanaFallbacks.length > 0) {
         for (const fallback of solanaFallbacks) {
           if (missingAddresses.length === 0) break;
           try {
