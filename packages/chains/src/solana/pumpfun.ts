@@ -20,6 +20,7 @@ export function watchPumpFunLaunches(
   onEvent: (pair: NewPairEvent) => void,
 ): () => void {
   const rpcLimiter = new AsyncRateLimiter(3);
+  const fallback = new Connection(process.env.SOLANA_RPC_FALLBACK_URL || "https://api.mainnet-beta.solana.com", "confirmed");
   const processedSignatures = new Set<string>();
   const inFlightSignatures = new Set<string>();
 
@@ -49,6 +50,15 @@ export function watchPumpFunLaunches(
         );
       } catch (err) {
         lastError = err;
+        try {
+          tx = await fallback.getTransaction(signature, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+          });
+          if (tx) log.info({ signature, source }, "Pump.fun transaction recovered from fallback RPC");
+        } catch (fallbackErr) {
+          lastError = fallbackErr;
+        }
       }
 
       if (!tx) {
@@ -170,10 +180,16 @@ export function watchPumpFunLaunches(
     if (polling) return;
     polling = true;
     try {
-      const signatures = await withRpcRetry(
-        () => connection.getSignaturesForAddress(PUMP_FUN_PROGRAM_ID, { limit: 10 }, "confirmed"),
-        rpcLimiter,
-      );
+      let signatures;
+      try {
+        signatures = await withRpcRetry(
+          () => connection.getSignaturesForAddress(PUMP_FUN_PROGRAM_ID, { limit: 10 }, "confirmed"),
+          rpcLimiter,
+        );
+      } catch (err) {
+        log.warn({ err }, "Primary Pump.fun polling RPC unavailable; switching to fallback RPC");
+        signatures = await fallback.getSignaturesForAddress(PUMP_FUN_PROGRAM_ID, { limit: 10 }, "confirmed");
+      }
 
       const unseen = signatures
         .map((entry) => entry.signature)
