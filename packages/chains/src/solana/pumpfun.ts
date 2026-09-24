@@ -7,7 +7,6 @@ const log = createLogger("chains:solana:pumpfun");
 // Pump.fun's program ID (mainnet + devnet share this address).
 const PUMP_FUN_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Subscribes to Pump.fun token creation events via log subscription.
