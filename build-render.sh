@@ -9,7 +9,8 @@ echo "📦 Installing dependencies..."
 # The research branch currently has a workspace package that is not yet
 # reflected in package-lock.json. npm install repairs the lockfile during
 # the Render build; npm ci would fail before the application is built.
-npm install
+npm install --include=optional
+npm rebuild @prisma/engines
 
 echo "🧹 Cleaning TypeScript build artifacts..."
 find . -type d \( -name dist -o -name .turbo \) -prune -exec rm -rf {} +
