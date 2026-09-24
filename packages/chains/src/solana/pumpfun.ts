@@ -1,6 +1,6 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import type { NewPairEvent } from "@clawd/core";
-import { createLogger } from "@clawd/core";
+import { AsyncRateLimiter, createLogger, withRpcRetry } from "@clawd/core";
 
 const log = createLogger("chains:solana:pumpfun");
 
@@ -20,6 +20,7 @@ export function watchPumpFunLaunches(
   connection: Connection,
   onEvent: (pair: NewPairEvent) => void,
 ): () => void {
+  const rpcLimiter = new AsyncRateLimiter(3);
   const processedSignatures = new Set<string>();
   const inFlightSignatures = new Set<string>();
 
@@ -39,20 +40,16 @@ export function watchPumpFunLaunches(
       let tx = null;
       let lastError: unknown = null;
 
-      // Public Solana RPCs can briefly return 429 for transaction lookups.
-      // Retry without marking the signature as processed so a later poll can
-      // recover a launch that could not be decoded on the first attempt.
-      for (let attempt = 1; attempt <= 3; attempt += 1) {
-        try {
-          tx = await connection.getTransaction(signature, {
+      try {
+        tx = await withRpcRetry(
+          () => connection.getTransaction(signature, {
             commitment: "confirmed",
             maxSupportedTransactionVersion: 0,
-          });
-          if (tx) break;
-        } catch (err) {
-          lastError = err;
-          if (attempt < 3) await sleep(attempt * 750);
-        }
+          }),
+          rpcLimiter,
+        );
+      } catch (err) {
+        lastError = err;
       }
 
       if (!tx) {
@@ -78,7 +75,7 @@ export function watchPumpFunLaunches(
 
       const lookupAccounts = await Promise.all(
         lookupTables.map(async (lookup) => {
-          const result = await connection.getAddressLookupTable(lookup.accountKey);
+          const result = await withRpcRetry(() => connection.getAddressLookupTable(lookup.accountKey), rpcLimiter, 3);
           return result.value;
         }),
       );
@@ -174,10 +171,9 @@ export function watchPumpFunLaunches(
     if (polling) return;
     polling = true;
     try {
-      const signatures = await connection.getSignaturesForAddress(
-        PUMP_FUN_PROGRAM_ID,
-        { limit: 10 },
-        "confirmed",
+      const signatures = await withRpcRetry(
+        () => connection.getSignaturesForAddress(PUMP_FUN_PROGRAM_ID, { limit: 10 }, "confirmed"),
+        rpcLimiter,
       );
 
       const unseen = signatures
@@ -207,7 +203,7 @@ export function watchPumpFunLaunches(
 
   const pollTimer = setInterval(() => {
     void poll();
-  }, 10_000);
+  }, 20_000);
 
   void poll();
 
