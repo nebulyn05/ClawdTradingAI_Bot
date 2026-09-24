@@ -23,7 +23,13 @@ export class AsyncRateLimiter {
   }
 }
 
+export function isRpcDailyLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /daily request limit|daily limit|requests per day|daily quota/i.test(message);
+}
+
 export function isRpcRateLimitError(error: unknown): boolean {
+  if (isRpcDailyLimitError(error)) return false;
   const message = error instanceof Error ? error.message : String(error);
   return /429|too many requests|rate limit|rate limit exceeded|requests per second/i.test(message);
 }
