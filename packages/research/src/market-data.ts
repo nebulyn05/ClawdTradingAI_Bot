@@ -1,4 +1,4 @@
-import { createLogger, eventBus, type NewPairEvent } from "@clawd/core";
+import { AsyncRateLimiter, createLogger, eventBus, type NewPairEvent, withRpcRetry } from "@clawd/core";
 import { getDb } from "@clawd/db";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { recordMarketObservation } from "./collector.js";
@@ -6,8 +6,8 @@ import type { MarketObservation } from "./types.js";
 import { enrichSolanaSecurity } from "./security.js";
 
 const log = createLogger("research:market-data");
-const DEFAULT_INTERVAL_MS = 15_000;
-const DEFAULT_MAX_PAIRS_PER_TICK = 20;
+const DEFAULT_INTERVAL_MS = 45_000;
+const DEFAULT_MAX_PAIRS_PER_TICK = 8;
 const PUMP_API_TIMEOUT_MS = 4_000;
 const DEXSCREENER_BASE = "https://api.dexscreener.com";
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet.solana.com";
@@ -355,6 +355,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
   const maxPairsPerTick = config.maxPairsPerTick ?? DEFAULT_MAX_PAIRS_PER_TICK;
   const maxDexEnrichmentsPerTick = config.maxDexEnrichmentsPerTick ?? 3;
   let stopped = false;
+  const rpcLimiter = new AsyncRateLimiter(5);
   let timer: ReturnType<typeof setInterval> | undefined;
   const running = new Set<string>();
   // Preserve the exact bonding-curve account decoded from the Pump.fun
@@ -400,7 +401,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
       const BATCH_SIZE = 5;
       for (let offset = 0; offset < flatAddresses.length; offset += BATCH_SIZE) {
         const batch = flatAddresses.slice(offset, offset + BATCH_SIZE);
-        const accounts = await solana.getMultipleAccountsInfo(batch, "confirmed");
+        const accounts = await withRpcRetry(() => solana.getMultipleAccountsInfo(batch, "confirmed"), rpcLimiter);
         batch.forEach((address, index) => accountByAddress.set(address.toBase58(), accounts[index] ?? null));
       }
 
@@ -411,7 +412,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           try {
             for (let offset = 0; offset < missingAddresses.length; offset += BATCH_SIZE) {
               const batch = missingAddresses.slice(offset, offset + BATCH_SIZE);
-              const accounts = await fallback.connection.getMultipleAccountsInfo(batch, "processed");
+              const accounts = await withRpcRetry(() => fallback.connection.getMultipleAccountsInfo(batch, "processed"), rpcLimiter, 3);
               batch.forEach((address, index) => {
                 const account = accounts[index] ?? null;
                 if (account) accountByAddress.set(address.toBase58(), account);
@@ -444,6 +445,24 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         if (selected) curveAccountsParsed += 1;
         curveByToken.set(opportunity.tokenAddress, selected);
         if (selectedAddress) curveAddressByToken.set(opportunity.tokenAddress, selectedAddress);
+
+        const capturedAddress = capturedCurveByToken.get(opportunity.tokenAddress) ?? opportunity.pairAddress;
+        const derivedAddress = derivePumpBondingCurve(new PublicKey(opportunity.tokenAddress)).toBase58();
+        if (capturedAddress && capturedAddress !== opportunity.tokenAddress) {
+          const capturedAccount = accountByAddress.get(capturedAddress);
+          const derivedAccount = accountByAddress.get(derivedAddress);
+          log.info({
+            tokenAddress: opportunity.tokenAddress,
+            capturedCurve: capturedAddress,
+            derivedCurve: derivedAddress,
+            capturedMatchesDerived: capturedAddress === derivedAddress,
+            capturedAccountFound: Boolean(capturedAccount),
+            derivedAccountFound: Boolean(derivedAccount),
+            capturedOwner: capturedAccount?.owner.toBase58(),
+            derivedOwner: derivedAccount?.owner.toBase58(),
+            dataLength: capturedAccount?.data.length ?? derivedAccount?.data.length,
+          }, "Pump.fun bonding curve PDA diagnostic");
+        }
 
         if (anyAccount && !selected) {
           log.warn({
@@ -598,7 +617,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
           }
           liveCurveByToken.set(pair.tokenAddress, parsed);
           log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, virtualSolReserves: parsed.virtualSolReserves.toString(), virtualTokenReserves: parsed.virtualTokenReserves.toString(), realSolReserves: parsed.realSolReserves.toString(), realTokenReserves: parsed.realTokenReserves.toString(), complete: parsed.complete }, "Pump.fun bonding curve update received");
-          void tick();
+          void requestTick();
         }, "processed");
         curveSubscriptions.set(pair.tokenAddress, subscriptionId);
         log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, subscriptionId }, "Pump.fun bonding curve subscription active");
@@ -609,7 +628,7 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
 
     void (async () => {
       try {
-        const account = await solana.getAccountInfo(new PublicKey(pair.pairAddress), "processed");
+        const account = await withRpcRetry(() => solana.getAccountInfo(new PublicKey(pair.pairAddress), "processed"), rpcLimiter);
         const parsed = parsePumpCurveAccount(account);
         if (parsed) liveCurveByToken.set(pair.tokenAddress, parsed);
         log.info({ tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress, accountFound: Boolean(account), parsed: Boolean(parsed), dataLength: account?.data.length, owner: account?.owner.toBase58() }, "Pump.fun captured curve RPC probe");
@@ -617,12 +636,19 @@ export function startSolanaMarketDataCollector(config: MarketDataCollectorConfig
         log.warn({ err, tokenAddress: pair.tokenAddress, pairAddress: pair.pairAddress }, "Pump.fun captured curve RPC probe failed");
       }
       // Let the research collector finish its DB upsert before the market-data handoff runs.
-      setTimeout(() => void tick(), 1000);
+      setTimeout(() => void requestTick(), 1000);
     })();
   };
+  let tickPromise: Promise<void> | undefined;
+  const requestTick = () => {
+    if (tickPromise) return tickPromise;
+    tickPromise = tick().finally(() => { tickPromise = undefined; });
+    return tickPromise;
+  };
+
   const unsubscribe = eventBus.on("sniper.newPair", onPair);
-  void tick();
-  timer = setInterval(() => void tick(), intervalMs);
+  void requestTick();
+  timer = setInterval(() => void requestTick(), intervalMs);
   log.info({ intervalMs, maxPairsPerTick, maxDexEnrichmentsPerTick }, "Solana market-data collector started");
   return () => {
     stopped = true;
