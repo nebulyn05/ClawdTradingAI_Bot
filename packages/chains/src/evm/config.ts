@@ -29,11 +29,11 @@ interface EvmChainConfig {
   routerAddress: `0x${string}` | undefined;
   wrappedNativeAddress: `0x${string}` | undefined;
   /** Uniswap V3 factory used for pool discovery/validation. */
-  v3FactoryAddress: `0x${string}` | undefined;
-  /** Uniswap V3 QuoterV2 used for live single-hop quotes. */
-  v3QuoterAddress: `0x${string}` | undefined;
-  /** Uniswap V3 SwapRouter02 used for live single-hop execution. */
-  v3RouterAddress: `0x${string}` | undefined;
+  v3FactoryAddress?: `0x${string}`;
+  /** Uniswap V3 QuoterV2 used for live quotes. */
+  v3QuoterAddress?: `0x${string}`;
+  /** Uniswap V3 SwapRouter02 used for live execution. */
+  v3RouterAddress?: `0x${string}`;
 }
 
 // Canonical mainnet deployments. Testnets have no default — most public
