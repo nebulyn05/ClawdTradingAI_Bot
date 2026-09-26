@@ -5,9 +5,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await requireAdminSession();
 
   return (
-    <div className="flex min-h-screen">
+    <div className="min-h-screen md:flex">
       <Sidebar session={session} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1 pt-16 md:pt-0">{children}</div>
     </div>
   );
 }
