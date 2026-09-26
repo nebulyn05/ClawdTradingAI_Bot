@@ -35,9 +35,9 @@ export function createEvmAdapter(chain: EvmChain): ChainAdapter {
     },
 
     async getQuote(tokenIn, tokenOut, amountIn) {
-      // Base, Monad and Robinhood Chain now use their verified Uniswap V3
-      // deployments. V3 is required there because those chains do not have
-      // a canonical V2 router wired into this adapter.
+      // Base, Monad and Robinhood Chain use their verified Uniswap V3
+      // deployments. The V3 module probes direct pools and a wrapped-native
+      // two-hop path across the supported fee tiers.
       if (chain === "base" || chain === "monad" || chain === "robinhood") {
         return getUniswapV3Quote(chain, tokenIn, tokenOut, amountIn);
       }
