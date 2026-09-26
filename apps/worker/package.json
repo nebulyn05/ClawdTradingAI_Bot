@@ -13,10 +13,6 @@
     "@clawd/core": "*",
     "@clawd/db": "*",
     "@clawd/chains": "*",
-    "@clawd/sniper": "*",
-    "@clawd/scout": "*",
-    "@clawd/arbiter": "*",
-    "@clawd/guard": "*",
     "@clawd/router": "*"
   },
   "devDependencies": {
