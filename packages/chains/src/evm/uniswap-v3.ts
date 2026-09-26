@@ -1,3 +1,4 @@
+import { encodePacked } from "viem";
 import {
   createPublicClient,
   createWalletClient,
@@ -15,24 +16,17 @@ import { ERC20_ABI, NATIVE_TOKEN_ADDRESS } from "./abis.js";
 
 const QUOTER_V2_ABI = [
   {
-    name: "quoteExactInputSingle",
+    name: "quoteExactInput",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [{
-      name: "params",
-      type: "tuple",
-      components: [
-        { name: "tokenIn", type: "address" },
-        { name: "tokenOut", type: "address" },
-        { name: "amountIn", type: "uint256" },
-        { name: "fee", type: "uint24" },
-        { name: "sqrtPriceLimitX96", type: "uint160" },
-      ],
-    }],
+    inputs: [
+      { name: "path", type: "bytes" },
+      { name: "amountIn", type: "uint256" },
+    ],
     outputs: [
       { name: "amountOut", type: "uint256" },
-      { name: "sqrtPriceX96After", type: "uint160" },
-      { name: "initializedTicksCrossed", type: "uint32" },
+      { name: "sqrtPriceX96AfterList", type: "uint160[]" },
+      { name: "initializedTicksCrossedList", type: "uint32[]" },
       { name: "gasEstimate", type: "uint256" },
     ],
   },
@@ -50,21 +44,18 @@ const V3_ROUTER_ABI = [
     outputs: [],
   },
   {
-    name: "exactInputSingle",
+    name: "exactInput",
     type: "function",
     stateMutability: "payable",
     inputs: [{
       name: "params",
       type: "tuple",
       components: [
-        { name: "tokenIn", type: "address" },
-        { name: "tokenOut", type: "address" },
-        { name: "fee", type: "uint24" },
+        { name: "path", type: "bytes" },
         { name: "recipient", type: "address" },
         { name: "deadline", type: "uint256" },
         { name: "amountIn", type: "uint256" },
         { name: "amountOutMinimum", type: "uint256" },
-        { name: "sqrtPriceLimitX96", type: "uint160" },
       ],
     }],
     outputs: [{ name: "amountOut", type: "uint256" }],
@@ -117,33 +108,99 @@ function normalizeToken(address: string, wrappedNative: `0x${string}`): `0x${str
   return (address === NATIVE_TOKEN_ADDRESS ? wrappedNative : address) as `0x${string}`;
 }
 
-async function quoteTier(
+function buildV3Path(tokens: readonly `0x${string}`[], fees: readonly number[]): `0x${string}` {
+  if (tokens.length !== fees.length + 1) {
+    throw new Error("Uniswap V3 path must contain exactly one more token than fee.");
+  }
+  const types: ("address" | "uint24")[] = [];
+  const values: (string | number)[] = [];
+  tokens.forEach((token, index) => {
+    types.push("address");
+    values.push(token);
+    if (index < fees.length) {
+      types.push("uint24");
+      values.push(fees[index]!);
+    }
+  });
+  return encodePacked(types, values);
+}
+
+async function quotePath(
   client: PublicClient,
   quoter: `0x${string}`,
-  tokenIn: `0x${string}`,
-  tokenOut: `0x${string}`,
+  path: `0x${string}`,
   amountIn: bigint,
-  fee: number,
 ) {
   try {
     const result = await client.simulateContract({
       address: quoter,
       abi: QUOTER_V2_ABI,
-      functionName: "quoteExactInputSingle",
-      args: [{
-        tokenIn,
-        tokenOut,
-        amountIn,
-        fee,
-        sqrtPriceLimitX96: 0n,
-      }],
+      functionName: "quoteExactInput",
+      args: [path, amountIn],
     });
-    const [amountOut, sqrtPriceX96After] = result.result;
+    const [amountOut, sqrtPriceX96AfterList] = result.result;
     if (amountOut <= 0n) return null;
-    return { amountOut, sqrtPriceX96After, fee };
+    return { amountOut, sqrtPriceX96AfterList };
   } catch {
     return null;
   }
+}
+
+type CandidatePath = {
+  tokens: readonly `0x${string}`[];
+  fees: readonly number[];
+  path: `0x${string}`;
+  amountOut: bigint;
+  sqrtPriceX96AfterList: readonly bigint[];
+};
+
+async function findBestPath(
+  client: PublicClient,
+  quoter: `0x${string}`,
+  tokenIn: `0x${string}`,
+  tokenOut: `0x${string}`,
+  wrappedNative: `0x${string}`,
+  amountIn: bigint,
+): Promise<CandidatePath | null> {
+  const candidates: CandidatePath[] = [];
+
+  // Direct pools: probe every supported V3 fee tier.
+  for (const fee of FEE_TIERS) {
+    const path = buildV3Path([tokenIn, tokenOut], [fee]);
+    const quote = await quotePath(client, quoter, path, amountIn);
+    if (quote) candidates.push({
+      tokens: [tokenIn, tokenOut],
+      fees: [fee],
+      path,
+      ...quote,
+    });
+  }
+
+  // One-hop intermediary through wrapped native. This catches the common
+  // token -> WETH/WMON -> token route without hard-coding chain-specific
+  // stablecoin addresses.
+  if (
+    tokenIn.toLowerCase() !== wrappedNative.toLowerCase() &&
+    tokenOut.toLowerCase() !== wrappedNative.toLowerCase()
+  ) {
+    for (const firstFee of FEE_TIERS) {
+      for (const secondFee of FEE_TIERS) {
+        const path = buildV3Path([tokenIn, wrappedNative, tokenOut], [firstFee, secondFee]);
+        const quote = await quotePath(client, quoter, path, amountIn);
+        if (quote) candidates.push({
+          tokens: [tokenIn, wrappedNative, tokenOut],
+          fees: [firstFee, secondFee],
+          path,
+          ...quote,
+        });
+      }
+    }
+  }
+
+  candidates.sort((a, b) =>
+    a.amountOut > b.amountOut ? -1 : a.amountOut < b.amountOut ? 1 : 0,
+  );
+  return candidates[0] ?? null;
 }
 
 export async function getUniswapV3Quote(
@@ -161,15 +218,10 @@ export async function getUniswapV3Quote(
     throw new Error("Cannot quote a swap where tokenIn equals tokenOut.");
   }
 
-  const quotes = await Promise.all(
-    FEE_TIERS.map((fee) => quoteTier(client, quoter, inToken, outToken, amountIn, fee)),
-  );
-  const best = quotes
-    .filter((q): q is NonNullable<typeof q> => q !== null)
-    .sort((a, b) => (a.amountOut > b.amountOut ? -1 : a.amountOut < b.amountOut ? 1 : 0))[0];
+  const best = await findBestPath(client, quoter, inToken, outToken, wrappedNative, amountIn);
 
   if (!best) {
-    throw new Error(`No Uniswap V3 pool with liquidity found for ${chain}: ${tokenIn} -> ${tokenOut}`);
+    throw new Error(`No Uniswap V3 pool/path with liquidity found for ${chain}: ${tokenIn} -> ${tokenOut}`);
   }
 
   return {
@@ -181,9 +233,11 @@ export async function getUniswapV3Quote(
     priceImpactPct: 0,
     route: "uniswap-v3",
     raw: {
-      fee: best.fee,
-      sqrtPriceX96After: best.sqrtPriceX96After.toString(),
-    } satisfies V3QuoteRaw,
+      path: best.path,
+      fees: best.fees,
+      tokens: best.tokens,
+      sqrtPriceX96AfterList: best.sqrtPriceX96AfterList.map((v) => v.toString()),
+    },
   };
 }
 
@@ -228,7 +282,11 @@ export async function executeUniswapV3Swap(
     transport: await getSubmitTransport(chain),
   });
 
-  const raw = quote.raw as V3QuoteRaw;
+  const raw = quote.raw as V3QuoteRaw & {
+    path: `0x${string}`;
+    fees: number[];
+    tokens: `0x${string}`[];
+  };
   const tokenIn = normalizeToken(quote.tokenIn, wrappedNative);
   const tokenOut = normalizeToken(quote.tokenOut, wrappedNative);
   const amountIn = BigInt(quote.amountIn);
