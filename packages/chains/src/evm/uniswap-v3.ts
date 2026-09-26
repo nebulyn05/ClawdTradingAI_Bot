@@ -1,5 +1,6 @@
 import {
   createPublicClient,
+  encodeFunctionData,
   createWalletClient,
   type Account,
   type PublicClient,
@@ -32,6 +33,13 @@ const QUOTER_V2_ABI = [
 ] as const;
 
 const V3_ROUTER_ABI = [
+  {
+    name: "multicall",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [{ name: "data", type: "bytes[]" }],
+    outputs: [{ name: "results", type: "bytes[]" }],
+  },
   {
     name: "unwrapWETH9",
     type: "function",
@@ -305,21 +313,48 @@ export async function executeUniswapV3Swap(
     await ensureAllowance(publicClient, walletClient, tokenIn, router, amountIn, account);
   }
 
-  const swapHash = await walletClient.writeContract({
-    address: router,
-    abi: V3_ROUTER_ABI,
-    functionName: "exactInput",
-    args: [{
-      path: raw.path,
-      recipient: quote.tokenOut === NATIVE_TOKEN_ADDRESS ? router : account.address,
-      deadline,
-      amountIn,
-      amountOutMinimum: amountOutMin,
-    }],
-    value: 0n,
-    account,
-    chain: cfg.viemChain,
-  });
+  const exactInputArgs = [{
+    path: raw.path,
+    recipient: quote.tokenOut === NATIVE_TOKEN_ADDRESS ? router : account.address,
+    deadline,
+    amountIn,
+    amountOutMinimum: amountOutMin,
+  }] as const;
+
+  let swapHash: `0x${string}`;
+  if (quote.tokenOut === NATIVE_TOKEN_ADDRESS) {
+    // Keep the swap and unwrap atomic. This avoids leaving WETH stranded in
+    // the router if a second unwrap transaction fails.
+    const swapCalldata = encodeFunctionData({
+      abi: V3_ROUTER_ABI,
+      functionName: "exactInput",
+      args: exactInputArgs,
+    });
+    const unwrapCalldata = encodeFunctionData({
+      abi: V3_ROUTER_ABI,
+      functionName: "unwrapWETH9",
+      args: [amountOutMin, account.address],
+    });
+    swapHash = await walletClient.writeContract({
+      address: router,
+      abi: V3_ROUTER_ABI,
+      functionName: "multicall",
+      args: [[swapCalldata, unwrapCalldata]],
+      value: 0n,
+      account,
+      chain: cfg.viemChain,
+    });
+  } else {
+    swapHash = await walletClient.writeContract({
+      address: router,
+      abi: V3_ROUTER_ABI,
+      functionName: "exactInput",
+      args: exactInputArgs,
+      value: 0n,
+      account,
+      chain: cfg.viemChain,
+    });
+  }
   const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
 
   if (receipt.status !== "success") {
@@ -331,22 +366,6 @@ export async function executeUniswapV3Swap(
       amountOut: quote.amountOut,
       price: Number(quote.amountOut) / Math.max(Number(quote.amountIn), 1),
     };
-  }
-
-  if (quote.tokenOut === NATIVE_TOKEN_ADDRESS) {
-    // SwapRouter02 receives the WETH output because the swap recipient above
-    // was the router. Unwrap the quoted minimum and send native ETH to the
-    // wallet. Any excess WETH remains on the router only if the quote changed
-    // materially; the minimum protects against a below-quote execution.
-    const unwrapHash = await walletClient.writeContract({
-      address: router,
-      abi: V3_ROUTER_ABI,
-      functionName: "unwrapWETH9",
-      args: [amountOutMin, account.address],
-      account,
-      chain: cfg.viemChain,
-    });
-    await publicClient.waitForTransactionReceipt({ hash: unwrapHash });
   }
 
   return {
