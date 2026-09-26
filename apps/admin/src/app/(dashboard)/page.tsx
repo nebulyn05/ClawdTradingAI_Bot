@@ -60,14 +60,17 @@ export default async function OverviewPage() {
 
   return (
     <main className="page-shell">
-      <div>
-        <h1 className="text-lg font-semibold">Overview</h1>
-        <p className="text-sm text-white/60">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+        <h1 className="page-title">Overview</h1>
+        <p className="page-subtitle">
           Platform snapshot.{" "}
           <Link href="/activity" className="text-accent hover:underline">
             Full activity & trends →
           </Link>
         </p>
+        </div>
+        <div className="hidden rounded-full border border-emerald-400/15 bg-emerald-400/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300 sm:block">● Control center online</div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4">
@@ -122,7 +125,7 @@ export default async function OverviewPage() {
         {cumulativeBalances.byChain.length === 0 ? (
           <p className="text-sm text-white/50">No wallets yet.</p>
         ) : (
-          <div className="table-scroll"><div className="table-scroll"><table className="data-table">
+          <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
                 <th>Chain</th>
@@ -146,7 +149,7 @@ export default async function OverviewPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 
@@ -173,7 +176,7 @@ export default async function OverviewPage() {
             View all →
           </Link>
         </div>
-        <table className="data-table">
+        <div className="table-scroll"><table className="data-table">
           <thead>
             <tr>
               <th>When</th>
@@ -201,7 +204,7 @@ export default async function OverviewPage() {
               </tr>
             ) : null}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </main>
   );
