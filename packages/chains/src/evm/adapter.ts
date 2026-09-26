@@ -6,6 +6,7 @@ import { evmConfig, type EvmChain } from "./config.js";
 import { createEvmTransport } from "./transport.js";
 import { watchEvmNewPairs, watchEvmWallet } from "./watch.js";
 import { getUniswapV2Quote, executeUniswapV2Swap } from "./uniswap-v2.js";
+import { getUniswapV3Quote, executeUniswapV3Swap } from "./uniswap-v3.js";
 import { getOneInchQuote, executeOneInchSwap } from "./oneinch.js";
 import { withdrawNative } from "./transfer.js";
 import { getErc20Balance, transferErc20 } from "./token-transfer.js";
@@ -34,10 +35,17 @@ export function createEvmAdapter(chain: EvmChain): ChainAdapter {
     },
 
     async getQuote(tokenIn, tokenOut, amountIn) {
+      // Base, Monad and Robinhood Chain now use their verified Uniswap V3
+      // deployments. V3 is required there because those chains do not have
+      // a canonical V2 router wired into this adapter.
+      if (chain === "base" || chain === "monad" || chain === "robinhood") {
+        return getUniswapV3Quote(chain, tokenIn, tokenOut, amountIn);
+      }
+
       // 1inch aggregates across every DEX on the chain — genuinely "best
       // fill," unlike the direct V2 router below — but only exists on
       // mainnet with an API key configured. Falls back to the V2 router
-      // (works everywhere, including testnets) otherwise.
+      // otherwise.
       const oneInch = await getOneInchQuote(chain, tokenIn, tokenOut, amountIn);
       if (oneInch) return oneInch;
       return getUniswapV2Quote(chain, tokenIn, tokenOut, amountIn);
@@ -45,6 +53,9 @@ export function createEvmAdapter(chain: EvmChain): ChainAdapter {
 
     async executeSwap(encryptedKey, quote) {
       return withDecryptedKey(encryptedKey, async (rawKey) => {
+        if (quote.route === "uniswap-v3") {
+          return executeUniswapV3Swap(chain, rawKey, quote);
+        }
         if (quote.route === "1inch") {
           const result = await executeOneInchSwap(chain, rawKey, quote);
           if (result) return result;
