@@ -188,6 +188,21 @@ const envSchema = z.object({
   BASE_ROUTER_ADDRESS: z.string().optional().default(""),
   BASE_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
 
+  // Verified Uniswap V3 mainnet overrides for Base, Monad and Robinhood Chain.
+  // Leave blank to use the canonical defaults in packages/chains/src/evm/config.ts.
+  BASE_V3_FACTORY_ADDRESS: z.string().optional().default(""),
+  BASE_V3_QUOTER_ADDRESS: z.string().optional().default(""),
+  BASE_V3_ROUTER_ADDRESS: z.string().optional().default(""),
+  BASE_V3_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+  MONAD_V3_FACTORY_ADDRESS: z.string().optional().default(""),
+  MONAD_V3_QUOTER_ADDRESS: z.string().optional().default(""),
+  MONAD_V3_ROUTER_ADDRESS: z.string().optional().default(""),
+  MONAD_V3_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_V3_FACTORY_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_V3_QUOTER_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_V3_ROUTER_ADDRESS: z.string().optional().default(""),
+  ROBINHOOD_V3_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
+
   ONEINCH_API_KEY: z.string().optional().default(""),
 
   BIRDEYE_API_KEY: z.string().optional().default(""),
