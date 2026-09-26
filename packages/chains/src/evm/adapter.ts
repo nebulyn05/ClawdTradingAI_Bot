@@ -39,7 +39,18 @@ export function createEvmAdapter(chain: EvmChain): ChainAdapter {
       // deployments. The V3 module probes direct pools and a wrapped-native
       // two-hop path across the supported fee tiers.
       if (chain === "base" || chain === "monad" || chain === "robinhood") {
-        return getUniswapV3Quote(chain, tokenIn, tokenOut, amountIn);
+        try {
+          return await getUniswapV3Quote(chain, tokenIn, tokenOut, amountIn);
+        } catch (v3Error) {
+          // V3 is preferred, but these chains also have live Uniswap V2
+          // deployments. A fresh V2 quote prevents a temporary V3 liquidity
+          // gap from making an otherwise routable trade fail outright.
+          log.debug(
+            { chain, err: v3Error instanceof Error ? v3Error.message : String(v3Error) },
+            "Uniswap V3 route unavailable — trying V2 fallback",
+          );
+          return getUniswapV2Quote(chain, tokenIn, tokenOut, amountIn);
+        }
       }
 
       // 1inch aggregates across every DEX on the chain — genuinely "best
