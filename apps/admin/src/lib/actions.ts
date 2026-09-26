@@ -225,10 +225,14 @@ export async function createRuleAction(formData: FormData) {
     parseNativeAmount(chain, amountNative);
 
     if (type === "nativeBalanceAbove" || type === "nativeBalanceBelow") {
-      return { type, chain, amountNative };
+      return type === "nativeBalanceAbove"
+        ? { type: "nativeBalanceAbove", chain, amountNative }
+        : { type: "nativeBalanceBelow", chain, amountNative };
     }
     if (type === "profitAbove" || type === "profitBelow") {
-      return { type, chain, amountNative };
+      return type === "profitAbove"
+        ? { type: "profitAbove", chain, amountNative }
+        : { type: "profitBelow", chain, amountNative };
     }
     throw new Error("Unsupported rule condition.");
   };
