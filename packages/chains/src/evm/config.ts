@@ -101,7 +101,7 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       };
     }
     case "bsc": {
-      const rpcUrl = network === "mainnet" ? cfg.QUICKNODE_BSC_URL : cfg.BSC_TESTNET_RPC_URL;
+      const rpcUrl = network === "mainnet" ? cfg.BSC_MAINNET_RPC_URL : cfg.BSC_TESTNET_RPC_URL;
       return {
         viemChain: network === "mainnet" ? bsc : bscTestnet,
         rpcUrl,
@@ -121,7 +121,7 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
       };
     }
     case "base": {
-      const rpcUrl = network === "mainnet" ? cfg.QUICKNODE_BASE_URL : cfg.BASE_TESTNET_RPC_URL;
+      const rpcUrl = network === "mainnet" ? cfg.BASE_MAINNET_RPC_URL : cfg.BASE_TESTNET_RPC_URL;
       return {
         viemChain: network === "mainnet" ? base : baseSepolia,
         rpcUrl,
