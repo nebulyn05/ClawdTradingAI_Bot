@@ -4,12 +4,28 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../core" },
-    { "path": "../../db" },
-    { "path": "../../chains" },
-    { "path": "../guard" },
-    { "path": "../../ai" }
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../db"
+    },
+    {
+      "path": "../../chains"
+    },
+    {
+      "path": "../guard"
+    },
+    {
+      "path": "../../ai"
+    }
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts"
   ]
 }
