@@ -2,62 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
+:root { color-scheme: dark; }
+html { background: #08060d; }
 
 body {
-  background: #0a0710;
-  background-image: radial-gradient(circle at 15% -10%, rgba(139, 92, 246, 0.08), transparent 40%);
+  min-height: 100vh;
+  background: #08060d;
+  background-image:
+    radial-gradient(circle at 15% -10%, rgba(139, 92, 246, 0.14), transparent 36%),
+    radial-gradient(circle at 100% 0%, rgba(59, 130, 246, 0.06), transparent 30%),
+    linear-gradient(180deg, rgba(255,255,255,0.015), transparent 22%);
   background-attachment: fixed;
   color: #e8e4f0;
 }
 
-.card {
-  @apply rounded-xl border border-border bg-panel p-5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_8px_24px_-16px_rgba(0,0,0,0.6)];
+::selection { background: rgba(139, 92, 246, 0.35); color: white; }
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-border bg-panel/80 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_18px_45px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm sm:p-5;
+  }
+  .stat-value { @apply text-2xl font-semibold tracking-tight sm:text-3xl; }
+  .stat-label { @apply mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45 sm:text-xs; }
+  .btn { @apply inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.15)_inset] hover:bg-accent/90 active:scale-[0.99]; }
+  .btn-secondary { @apply bg-white/10 text-white hover:bg-white/[0.16] active:scale-[0.99]; }
+  .btn-danger { @apply bg-red-500/15 text-red-300 hover:bg-red-500/25; }
+  .input { @apply w-full rounded-xl border border-border bg-black/30 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none transition-all focus:border-accent focus:ring-2 focus:ring-accent/15; }
+  .page-shell { @apply mx-auto w-full max-w-[1440px] space-y-5 p-4 sm:space-y-6 sm:p-6 lg:p-8; }
+  .page-title { @apply text-xl font-semibold tracking-tight text-white sm:text-2xl; }
+  .page-subtitle { @apply mt-1 text-sm text-white/50; }
+  table.data-table { @apply w-full min-w-[640px] text-sm; }
+  table.data-table th { @apply whitespace-nowrap border-b border-border px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45 sm:text-xs; }
+  table.data-table td { @apply border-b border-border/50 px-3 py-2.5 tabular-nums; }
+  table.data-table tbody tr { @apply transition-colors hover:bg-white/[0.03]; }
+  .table-scroll { @apply overflow-x-auto rounded-xl; -webkit-overflow-scrolling: touch; }
 }
 
-.stat-value {
-  /* Proportional figures, not tabular-nums, on a large standalone value — tabular-nums is reserved for table/axis columns that must align vertically. */
-  @apply text-2xl font-semibold tracking-tight;
-}
-
-.stat-label {
-  @apply text-xs uppercase tracking-wide text-white/50;
-}
-
-.btn {
-  @apply rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
-}
-
-.btn-primary {
-  @apply bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.15)_inset] hover:bg-accent/90;
-}
-
-.btn-secondary {
-  @apply bg-white/10 text-white hover:bg-white/[0.16];
-}
-
-.btn-danger {
-  @apply bg-red-500/15 text-red-300 hover:bg-red-500/25;
-}
-
-.input {
-  @apply w-full rounded-lg border border-border bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none transition-colors focus:border-accent;
-}
-
-table.data-table {
-  @apply w-full text-sm;
-}
-
-table.data-table th {
-  @apply border-b border-border px-3 py-2 text-left text-xs uppercase tracking-wide text-white/50;
-}
-
-table.data-table td {
-  @apply border-b border-border/50 px-3 py-2 tabular-nums;
-}
-
-table.data-table tbody tr {
-  @apply transition-colors hover:bg-white/[0.03];
+@media (max-width: 767px) {
+  .recharts-responsive-container { min-width: 0 !important; }
 }
