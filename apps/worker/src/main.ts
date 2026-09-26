@@ -2,6 +2,7 @@ import {
   createLogger,
   loadConfig,
   startKeepAlive,
+  stopKeepAlive,
   startPublishingToRedis,
 } from "@clawd/core";
 import {
@@ -23,13 +24,13 @@ async function main() {
   const keepAliveUrls = [process.env.RENDER_ADMIN_URL, process.env.RENDER_WEBSITE_URL]
     .filter((url): url is string => Boolean(url));
 
-  const stopKeepAlive = keepAliveUrls.length > 0
-    ? startKeepAlive({
-        urls: keepAliveUrls.map((url) => `${url}/api/health`),
-        intervalMs: 10 * 60 * 1000,
-        verbose: false,
-      })
-    : () => undefined;
+  if (keepAliveUrls.length > 0) {
+    startKeepAlive({
+      urls: keepAliveUrls.map((url) => `${url}/api/health`),
+      intervalMs: 10 * 60 * 1000,
+      verbose: false,
+    });
+  }
 
   // The worker deliberately does not start Sniper, Scout, KOL tracking or
   // Arbiter. Those signal-discovery systems are disabled for this phase.
