@@ -10,8 +10,32 @@ import {
   startRuleEngine,
   startDrawdownCheck,
 } from "@clawd/router";
+import { createServer } from "node:http";
 
 const log = createLogger("worker:main");
+
+function startHealthServer() {
+  const port = Number(process.env.PORT) || 10000;
+
+  const server = createServer((req, res) => {
+    if (req.url === "/api/health" || req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", service: "worker" }));
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  });
+
+  server.listen(port, "0.0.0.0", () => {
+    log.info(`Worker health server listening on port ${port}`);
+  });
+
+  return () => {
+    server.close(() => log.info("Worker health server stopped"));
+  };
+}
 
 async function main() {
   const cfg = loadConfig();
@@ -20,7 +44,8 @@ async function main() {
     "Starting Clawd trading worker (automation rules + position/risk management)",
   );
 
-  // Optional Render keep-alive for the Admin/Website services.
+  const stopHealthServer = startHealthServer();
+
   const keepAliveUrls = [process.env.RENDER_ADMIN_URL, process.env.RENDER_WEBSITE_URL]
     .filter((url): url is string => Boolean(url));
 
@@ -54,6 +79,7 @@ async function main() {
     stopDrawdownCheck();
     stopPublishing();
     stopKeepAlive();
+    stopHealthServer();
     process.exit(0);
   };
 
