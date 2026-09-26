@@ -83,11 +83,6 @@ const WETH_ABI = [
 // Robinhood Chain's documented launch liquidity commonly uses 1% (10000).
 const FEE_TIERS = [100, 500, 3000, 10000] as const;
 
-type V3QuoteRaw = {
-  fee: number;
-  sqrtPriceX96After: string;
-};
-
 function requireV3(chain: EvmChain) {
   const cfg = evmConfig(chain);
   if (networkForChain(chain) !== "mainnet") {
@@ -293,10 +288,8 @@ export async function executeUniswapV3Swap(
   const amountOutMin = (BigInt(quote.amountOut) * 95n) / 100n;
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 5 * 60);
 
-  let actualInput = amountIn;
-
-  // SwapRouter02's V3 exactInputSingle operates on ERC-20s. Wrap/unwrap native
-  // ETH explicitly when the quote uses the native sentinel.
+  // SwapRouter02's V3 exactInput operates on ERC-20s. Wrap native ETH
+  // explicitly when the quote uses the native sentinel.
   if (quote.tokenIn === NATIVE_TOKEN_ADDRESS) {
     const wrapHash = await walletClient.writeContract({
       address: wrappedNative,
@@ -315,16 +308,13 @@ export async function executeUniswapV3Swap(
   const swapHash = await walletClient.writeContract({
     address: router,
     abi: V3_ROUTER_ABI,
-    functionName: "exactInputSingle",
+    functionName: "exactInput",
     args: [{
-      tokenIn,
-      tokenOut,
-      fee: raw.fee,
+      path: raw.path,
       recipient: quote.tokenOut === NATIVE_TOKEN_ADDRESS ? router : account.address,
       deadline,
-      amountIn: actualInput,
+      amountIn,
       amountOutMinimum: amountOutMin,
-      sqrtPriceLimitX96: 0n,
     }],
     value: 0n,
     account,
