@@ -40,6 +40,16 @@ const QUOTER_V2_ABI = [
 
 const V3_ROUTER_ABI = [
   {
+    name: "unwrapWETH9",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "amountMinimum", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
     name: "exactInputSingle",
     type: "function",
     stateMutability: "payable",
@@ -275,11 +285,19 @@ export async function executeUniswapV3Swap(
   }
 
   if (quote.tokenOut === NATIVE_TOKEN_ADDRESS) {
-    // The router owns the WETH output. SwapRouter02 exposes unwrapWETH9, but
-    // using the WETH contract directly is not possible because the router
-    // holds the balance. We therefore require native-output swaps to use a
-    // router-compatible unwrap call in a future multicall path.
-    throw new Error("Native-output Uniswap V3 execution requires router multicall unwrap support.");
+    // SwapRouter02 receives the WETH output because the swap recipient above
+    // was the router. Unwrap the quoted minimum and send native ETH to the
+    // wallet. Any excess WETH remains on the router only if the quote changed
+    // materially; the minimum protects against a below-quote execution.
+    const unwrapHash = await walletClient.writeContract({
+      address: router,
+      abi: V3_ROUTER_ABI,
+      functionName: "unwrapWETH9",
+      args: [amountOutMin, account.address],
+      account,
+      chain: cfg.viemChain,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: unwrapHash });
   }
 
   return {
