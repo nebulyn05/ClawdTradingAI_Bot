@@ -102,23 +102,72 @@ export interface TxResult {
 export type PositionStatus = "open" | "closed";
 export type ExitReason = "take_profit" | "stop_loss" | "manual" | "guard_exit";
 
-/** Admin-defined rule condition — see packages/specialists/router/src/rules-engine.ts. */
+/** Admin-defined automation rule conditions. */
+export interface RuleConditionAlways {
+  type: "always";
+}
+
+/** True for users created after the rule itself was created. */
+export interface RuleConditionNewUser {
+  type: "newUser";
+}
+
+export interface RuleConditionNativeBalanceAbove {
+  type: "nativeBalanceAbove";
+  chain: Chain;
+  amountNative: string;
+}
+
+export interface RuleConditionNativeBalanceBelow {
+  type: "nativeBalanceBelow";
+  chain: Chain;
+  amountNative: string;
+}
+
 export interface RuleConditionProfitAbove {
   type: "profitAbove";
   chain: Chain;
-  /** Human decimal amount in the chain's native unit, e.g. "0.5". */
   amountNative: string;
 }
-export type RuleCondition = RuleConditionProfitAbove;
 
-/** Admin-defined rule action, run once per user whose condition newly qualifies. */
+export interface RuleConditionProfitBelow {
+  type: "profitBelow";
+  chain: Chain;
+  amountNative: string;
+}
+
+export interface RuleConditionAnd {
+  type: "and";
+  conditions: RuleCondition[];
+}
+
+export interface RuleConditionOr {
+  type: "or";
+  conditions: RuleCondition[];
+}
+
+export type RuleCondition =
+  | RuleConditionAlways
+  | RuleConditionNewUser
+  | RuleConditionNativeBalanceAbove
+  | RuleConditionNativeBalanceBelow
+  | RuleConditionProfitAbove
+  | RuleConditionProfitBelow
+  | RuleConditionAnd
+  | RuleConditionOr;
+
+export type RuleExecutionMode = "once" | "recurring";
+
 export interface RuleActionBuy {
   type: "buy";
   chain: Chain;
   tokenAddress: string;
-  /** Human decimal amount in the chain's native unit, e.g. "0.1". */
   sizeNative: string;
+  /** once = one trade per user; recurring = trade again after cooldown while condition remains true. */
+  mode?: RuleExecutionMode;
+  cooldownMinutes?: number;
 }
+
 export type RuleAction = RuleActionBuy;
 
 /** A KOL/Twitter call, interpreted by an LLM into a chain + token + conviction. */
