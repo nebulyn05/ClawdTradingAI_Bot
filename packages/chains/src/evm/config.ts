@@ -28,6 +28,12 @@ interface EvmChainConfig {
   /** Uniswap-V2-style router used to price and execute swaps. */
   routerAddress: `0x${string}` | undefined;
   wrappedNativeAddress: `0x${string}` | undefined;
+  /** Uniswap V3 factory used for pool discovery/validation. */
+  v3FactoryAddress: `0x${string}` | undefined;
+  /** Uniswap V3 QuoterV2 used for live single-hop quotes. */
+  v3QuoterAddress: `0x${string}` | undefined;
+  /** Uniswap V3 SwapRouter02 used for live single-hop execution. */
+  v3RouterAddress: `0x${string}` | undefined;
 }
 
 // Canonical mainnet deployments. Testnets have no default — most public
@@ -50,6 +56,27 @@ const PANCAKESWAP_V2_MAINNET = {
 };
 
 type Address = `0x${string}` | undefined;
+
+const UNISWAP_V3_MAINNET: Partial<Record<EvmChain, { factory: string; quoter: string; router: string; wrappedNative: string }>> = {
+  base: {
+    factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
+    quoter: "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+    router: "0x2626664c2603336E57B271c5C0b26F421741e481",
+    wrappedNative: "0x4200000000000000000000000000000000000006",
+  },
+  monad: {
+    factory: "0x204faca1764b154221e35c0d20abb3c525710498",
+    quoter: "0x661e93cca42afacb172121ef892830ca3b70f08d",
+    router: "0xfe31f71c1b106eac32f1a19239c9a9a72ddfb900",
+    wrappedNative: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+  },
+  robinhood: {
+    factory: "0x1f7d7550b1b028f7571e69a784071f0205fd2efa",
+    quoter: "0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7",
+    router: "0xcaf681a66d020601342297493863e78c959e5cb2",
+    wrappedNative: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+  },
+};
 
 function resolved(envValue: string, mainnetDefault: string | undefined, network: string): Address {
   if (envValue) return envValue as Address;
@@ -134,6 +161,9 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
         factoryAddress: resolved(cfg.BASE_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.BASE_ROUTER_ADDRESS, undefined, network),
         wrappedNativeAddress: resolved(cfg.BASE_WRAPPED_NATIVE_ADDRESS, undefined, network),
+        v3FactoryAddress: resolved("", UNISWAP_V3_MAINNET.base?.factory, network),
+        v3QuoterAddress: resolved("", UNISWAP_V3_MAINNET.base?.quoter, network),
+        v3RouterAddress: resolved("", UNISWAP_V3_MAINNET.base?.router, network),
       };
     }
     case "monad": {
@@ -160,6 +190,9 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
         factoryAddress: resolved(cfg.MONAD_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.MONAD_ROUTER_ADDRESS, undefined, network),
         wrappedNativeAddress: resolved(cfg.MONAD_WRAPPED_NATIVE_ADDRESS, undefined, network),
+        v3FactoryAddress: resolved("", UNISWAP_V3_MAINNET.monad?.factory, network),
+        v3QuoterAddress: resolved("", UNISWAP_V3_MAINNET.monad?.quoter, network),
+        v3RouterAddress: resolved("", UNISWAP_V3_MAINNET.monad?.router, network),
       };
     }
     case "robinhood": {
@@ -183,7 +216,10 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
         // No known public AMM factory on Robinhood Chain — see module comment.
         factoryAddress: resolved(cfg.ROBINHOOD_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.ROBINHOOD_ROUTER_ADDRESS, undefined, network),
-        wrappedNativeAddress: resolved(cfg.ROBINHOOD_WRAPPED_NATIVE_ADDRESS, undefined, network),
+        wrappedNativeAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.wrappedNative, network),
+        v3FactoryAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.factory, network),
+        v3QuoterAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.quoter, network),
+        v3RouterAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.router, network),
       };
     }
   }
