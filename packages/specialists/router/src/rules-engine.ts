@@ -1,6 +1,7 @@
 import { getDb } from "@clawd/db";
 import {
   createLogger,
+  networkForChain,
   type Chain,
   type RuleCondition,
   type RuleAction,
@@ -27,7 +28,7 @@ async function nativeBalance(userId: string, chain: Chain): Promise<bigint | nul
       userId_chain_network: {
         userId,
         chain,
-        network: getConfiguredNetwork(chain),
+        network: networkForChain(chain),
       },
     },
     select: { address: true, active: true },
@@ -44,22 +45,6 @@ async function nativeBalance(userId: string, chain: Chain): Promise<bigint | nul
     log.warn({ err, userId, chain }, "Failed to read wallet balance for rule condition");
     return null;
   }
-}
-
-function getConfiguredNetwork(chain: Chain): "testnet" | "mainnet" {
-  // Importing networkForChain here would add no new runtime dependency; keeping
-  // the lookup in one place also guarantees rules use the same network as Router.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const envKey = {
-    solana: "SOLANA_NETWORK",
-    ethereum: "ETHEREUM_NETWORK",
-    bsc: "BSC_NETWORK",
-    base: "BASE_NETWORK",
-    monad: "MONAD_NETWORK",
-    robinhood: "ROBINHOOD_NETWORK",
-  } as const;
-  const value = process.env[envKey[chain]];
-  return value === "testnet" ? "testnet" : "mainnet";
 }
 
 async function conditionMet(
