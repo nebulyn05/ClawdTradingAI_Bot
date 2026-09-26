@@ -196,32 +196,79 @@ export async function updateSettingAction(key: string, value: string) {
 export async function createRuleAction(formData: FormData) {
   const session = await requireAdminSession("operator");
   const name = String(formData.get("name") ?? "").trim();
-  const conditionChain = String(formData.get("conditionChain") ?? "") as Chain;
-  const conditionAmount = String(formData.get("conditionAmount") ?? "").trim();
+  const conditionType = String(formData.get("conditionType") ?? "always");
+  const condition2Type = String(formData.get("condition2Type") ?? "none");
+  const logic = String(formData.get("conditionLogic") ?? "and");
   const actionChain = String(formData.get("actionChain") ?? "") as Chain;
   const actionToken = String(formData.get("actionToken") ?? "").trim();
   const actionSize = String(formData.get("actionSize") ?? "").trim();
+  const actionMode = String(formData.get("actionMode") ?? "once");
+  const cooldownMinutes = Number(formData.get("cooldownMinutes") ?? 1440);
 
-  if (!name || !conditionChain || !conditionAmount || !actionChain || !actionToken || !actionSize) {
-    return;
+  if (!name || !actionChain || !actionToken || !actionSize) return;
+  if (!["once", "recurring"].includes(actionMode)) throw new Error("Invalid rule execution mode.");
+  if (!Number.isFinite(cooldownMinutes) || cooldownMinutes < 1) {
+    throw new Error("Recurring rule cooldown must be at least 1 minute.");
   }
 
-  const condition: RuleCondition = {
-    type: "profitAbove",
-    chain: conditionChain,
-    amountNative: conditionAmount,
+  const parseCondition = (
+    type: string,
+    chainField: string,
+    amountField: string,
+  ): RuleCondition => {
+    if (type === "always") return { type: "always" };
+    if (type === "newUser") return { type: "newUser" };
+
+    const chain = String(formData.get(chainField) ?? "") as Chain;
+    const amountNative = String(formData.get(amountField) ?? "").trim();
+    if (!chain || !amountNative) throw new Error("Rule condition requires a chain and amount.");
+    parseNativeAmount(chain, amountNative);
+
+    if (type === "nativeBalanceAbove" || type === "nativeBalanceBelow") {
+      return { type, chain, amountNative };
+    }
+    if (type === "profitAbove" || type === "profitBelow") {
+      return { type, chain, amountNative };
+    }
+    throw new Error("Unsupported rule condition.");
   };
+
+  const condition1 = parseCondition(conditionType, "conditionChain", "conditionAmount");
+  let condition: RuleCondition = condition1;
+
+  if (condition2Type !== "none") {
+    const condition2 = parseCondition(condition2Type, "condition2Chain", "condition2Amount");
+    if (logic === "or") {
+      condition = { type: "or", conditions: [condition1, condition2] };
+    } else {
+      condition = { type: "and", conditions: [condition1, condition2] };
+    }
+  }
+
+  parseNativeAmount(actionChain, actionSize);
+  if (!["solana", "ethereum", "bsc", "base", "monad", "robinhood"].includes(actionChain)) {
+    throw new Error("Unsupported action chain.");
+  }
+
   const action: RuleAction = {
     type: "buy",
     chain: actionChain,
     tokenAddress: actionToken,
     sizeNative: actionSize,
+    mode: actionMode as "once" | "recurring",
+    cooldownMinutes: actionMode === "recurring" ? Math.floor(cooldownMinutes) : undefined,
   };
 
   const rule = await getDb().rule.create({
     data: { name, condition: condition as object, action: action as object },
   });
-  await logAdminAction(session, "rule.create", { type: "rule", id: rule.id }, { name });
+
+  await logAdminAction(
+    session,
+    "rule.create",
+    { type: "rule", id: rule.id },
+    { name, condition, action },
+  );
   revalidatePath("/rules");
 }
 
