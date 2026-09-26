@@ -1,4 +1,3 @@
-import { encodePacked } from "viem";
 import {
   createPublicClient,
   createWalletClient,
@@ -107,17 +106,18 @@ function buildV3Path(tokens: readonly `0x${string}`[], fees: readonly number[]):
   if (tokens.length !== fees.length + 1) {
     throw new Error("Uniswap V3 path must contain exactly one more token than fee.");
   }
-  const types: ("address" | "uint24")[] = [];
-  const values: (string | number)[] = [];
+  let hex = "0x";
   tokens.forEach((token, index) => {
-    types.push("address");
-    values.push(token);
+    hex += token.slice(2);
     if (index < fees.length) {
-      types.push("uint24");
-      values.push(fees[index]!);
+      const fee = fees[index]!;
+      if (!Number.isInteger(fee) || fee < 0 || fee > 0xffffff) {
+        throw new Error(`Invalid Uniswap V3 fee tier: ${fee}`);
+      }
+      hex += fee.toString(16).padStart(6, "0");
     }
   });
-  return encodePacked(types, values);
+  return hex as `0x${string}`;
 }
 
 async function quotePath(
