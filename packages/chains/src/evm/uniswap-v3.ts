@@ -249,6 +249,7 @@ export async function executeUniswapV3Swap(
       chain: cfg.viemChain,
     });
     await publicClient.waitForTransactionReceipt({ hash: wrapHash });
+    await ensureAllowance(publicClient, walletClient, tokenIn, router, amountIn, account);
   } else {
     await ensureAllowance(publicClient, walletClient, tokenIn, router, amountIn, account);
   }
