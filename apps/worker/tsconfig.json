@@ -12,12 +12,6 @@
       "path": "../../packages/core"
     },
     {
-      "path": "../../packages/db"
-    },
-    {
-      "path": "../../packages/chains"
-    },
-    {
       "path": "../../packages/specialists/router"
     }
   ]
