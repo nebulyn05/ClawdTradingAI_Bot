@@ -18,7 +18,7 @@ export type Unsubscribe = () => void;
 export interface ChainAdapter {
   readonly chain: Chain;
   readonly network: NetworkMode;
-  /** False for stub adapters (Monad/Robinhood) — callers should check this before using the rest. */
+  /** False only for a chain adapter that is intentionally unavailable. */
   readonly enabled: boolean;
 
   /** Native-token balance (lamports for Solana, wei for EVM chains) at `address`. */
