@@ -285,7 +285,7 @@ export async function executeUniswapV3Swap(
     transport: await getSubmitTransport(chain),
   });
 
-  const raw = quote.raw as V3QuoteRaw & {
+  const raw = quote.raw as {
     path: `0x${string}`;
     fees: number[];
     tokens: `0x${string}`[];
