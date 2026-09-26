@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npx tsc -b ../../packages/db ../../packages/core ../../packages/ai ../../packages/wallet ../../packages/chains ../../packages/pricing ../../packages/specialists/guard && next build",
     "start": "next start"
   },
   "dependencies": {
