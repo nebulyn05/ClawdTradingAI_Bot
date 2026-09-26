@@ -11,8 +11,6 @@
   },
   "dependencies": {
     "@clawd/core": "*",
-    "@clawd/db": "*",
-    "@clawd/chains": "*",
     "@clawd/router": "*"
   },
   "devDependencies": {
