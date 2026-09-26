@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Chain, NetworkMode } from "./types.js";
 
-const networkSchema = z.enum(["testnet", "mainnet"]).default("testnet");
+const networkSchema = z.enum(["testnet", "mainnet"]).default("mainnet");
 
 // z.coerce.boolean() coerces ANY non-empty string (including the literal
 // text "false") to `true` — not what an env var flag needs. This parses the
@@ -79,7 +79,7 @@ const envSchema = z.object({
 
   HELIUS_API_KEY: z.string().optional().default(""),
   SOLANA_DEVNET_RPC_URL: z.string().default("https://api.devnet.solana.com"),
-  SOLANA_MAINNET_RPC_URL: z.string().optional().default(""),
+  SOLANA_MAINNET_RPC_URL: z.string().default("https://api.mainnet-beta.solana.com"),
   // Comma-separated secondary RPC endpoints — a request that fails against
   // the primary above retries against these, in order, before failing the
   // whole call (see packages/chains/src/rpc-failover.ts). Optional; no
@@ -94,11 +94,11 @@ const envSchema = z.object({
   QUICKNODE_BASE_URL: z.string().optional().default(""),
 
   ETHEREUM_TESTNET_RPC_URL: z.string().default("https://ethereum-sepolia-rpc.publicnode.com"),
-  ETHEREUM_MAINNET_RPC_URL: z.string().optional().default(""),
+  ETHEREUM_MAINNET_RPC_URL: z.string().default("https://ethereum-rpc.publicnode.com"),
   BSC_TESTNET_RPC_URL: z.string().default("https://bsc-testnet-rpc.publicnode.com"),
-  BSC_MAINNET_RPC_URL: z.string().optional().default(""),
+  BSC_MAINNET_RPC_URL: z.string().default("https://bsc-rpc.publicnode.com"),
   BASE_TESTNET_RPC_URL: z.string().default("https://base-sepolia-rpc.publicnode.com"),
-  BASE_MAINNET_RPC_URL: z.string().optional().default(""),
+  BASE_MAINNET_RPC_URL: z.string().default("https://base-rpc.publicnode.com"),
 
   // Comma-separated secondary RPC endpoints per chain/network — a request
   // that fails against the primary retries against these, in order, before
