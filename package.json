@@ -17,7 +17,7 @@
     "dev:website": "npm run dev --workspace=apps/website",
     "test": "vitest run",
     "lint": "tsc -b --pretty",
-    "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma && prisma db push --schema packages/db/prisma/schema.prisma",
+    "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma && printf 'CREATE SCHEMA IF NOT EXISTS legacy; ALTER TABLE IF EXISTS public.management_bot_configs SET SCHEMA legacy; ALTER TABLE IF EXISTS public.management_groups SET SCHEMA legacy; ALTER TABLE IF EXISTS public.management_schema_meta SET SCHEMA legacy; ALTER TABLE IF EXISTS public.management_signals SET SCHEMA legacy; ALTER TABLE IF EXISTS public.management_users SET SCHEMA legacy; ALTER TABLE IF EXISTS public.telegram_sessions SET SCHEMA legacy;' | prisma db execute --stdin --schema packages/db/prisma/schema.prisma && prisma db push --schema packages/db/prisma/schema.prisma --accept-data-loss",
     "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "serve:website": "serve website -l 8080"
   },
