@@ -2,11 +2,11 @@
 set -euo pipefail
 
 echo "========================================"
-echo " Clawd Agents - Render Build"
+echo " Clawd Trading Bot - Render Build"
 echo "========================================"
 
-echo "📦 Installing dependencies..."
-npm ci
+echo "📦 Installing dependencies (including dev dependencies needed to compile)..."
+npm ci --include=dev
 
 echo "🧹 Cleaning TypeScript build artifacts..."
 find . -type d \( -name dist -o -name .turbo \) -prune -exec rm -rf {} +
@@ -18,13 +18,7 @@ npm run db:generate
 echo "🗄️ Initializing PostgreSQL database..."
 npx prisma db push --schema packages/db/prisma/schema.prisma
 
-echo "🔨 Building TypeScript project references..."
+echo "🔨 Building bot and only the packages required by the bot..."
 npx tsc -b --pretty
 
-echo "🌐 Building Admin..."
-npm run build --workspace=@clawd/admin
-
-echo "🌐 Building Website..."
-npm run build --workspace=@clawd/website
-
-echo "✅ Render build completed successfully"
+echo "✅ Bot-only Render build completed successfully"
