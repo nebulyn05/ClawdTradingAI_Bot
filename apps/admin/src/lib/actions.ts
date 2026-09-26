@@ -249,7 +249,7 @@ export async function createRuleAction(formData: FormData) {
     }
   }
 
-  parseNativeAmount(actionChain, actionSize);
+  if (parseNativeAmount(actionChain, actionSize) <= 0n) throw new Error("Buy amount must be greater than zero.");
   if (!["solana", "ethereum", "bsc", "base", "monad", "robinhood"].includes(actionChain)) {
     throw new Error("Unsupported action chain.");
   }
