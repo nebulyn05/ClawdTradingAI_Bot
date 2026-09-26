@@ -140,10 +140,10 @@ const envSchema = z.object({
   ROBINHOOD_MAINNET_RPC_URL: z.string().default("https://rpc.mainnet.chain.robinhood.com"),
   ROBINHOOD_TESTNET_RPC_URL: z.string().default("https://rpc.testnet.chain.robinhood.com"),
 
-  // Neither chain has a known public Uniswap-V2-style DEX deployment wired in
-  // here yet — set these once you've confirmed one exists (Robinhood Chain in
-  // particular is built for tokenized stocks/RWAs, not permissionless meme
-  // trading, and may not have one at all).
+  // Uniswap V2-style overrides remain optional for chains where the Router
+  // uses the legacy V2 adapter. Base, Monad and Robinhood mainnet trading now
+  // uses verified Uniswap V3 deployments in packages/chains/src/evm/config.ts
+  // and packages/chains/src/evm/uniswap-v3.ts.
   MONAD_FACTORY_ADDRESS: z.string().optional().default(""),
   MONAD_ROUTER_ADDRESS: z.string().optional().default(""),
   MONAD_WRAPPED_NATIVE_ADDRESS: z.string().optional().default(""),
