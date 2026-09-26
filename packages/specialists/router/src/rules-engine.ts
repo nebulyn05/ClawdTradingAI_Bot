@@ -122,8 +122,12 @@ async function mayExecute(
 
   // Do not hammer Postgres/RPC every tick when a user matches but cannot trade
   // yet (for example, their wallet is still inactive or underfunded).
-  if (last.status !== "opened" && Date.now() - last.triggeredAt.getTime() < 60_000) {
-    return false;
+  if (last.status !== "opened") {
+    // A skipped/failed attempt should become eligible again after the short
+    // retry throttle. Do not apply the trade cooldown to unsuccessful attempts;
+    // otherwise a temporary underfunded/inactive wallet could be ignored for
+    // an entire day by the default 1440-minute cooldown.
+    return Date.now() - last.triggeredAt.getTime() >= 60_000;
   }
 
   const cooldownMinutes = Math.max(1, action.cooldownMinutes ?? 1440);
