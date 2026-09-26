@@ -222,6 +222,9 @@ export async function createRuleAction(formData: FormData) {
     const chain = String(formData.get(chainField) ?? "") as Chain;
     const amountNative = String(formData.get(amountField) ?? "").trim();
     if (!chain || !amountNative) throw new Error("Rule condition requires a chain and amount.");
+    if (!["solana", "ethereum", "bsc", "base", "monad", "robinhood"].includes(chain)) {
+      throw new Error("Unsupported condition chain.");
+    }
     parseNativeAmount(chain, amountNative);
 
     if (type === "nativeBalanceAbove" || type === "nativeBalanceBelow") {
