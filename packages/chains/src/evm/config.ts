@@ -39,8 +39,9 @@ interface EvmChainConfig {
 // Canonical mainnet deployments. Testnets have no default — most public
 // testnets don't have a single "official" V2 fork — so those fall back to
 // the *_FACTORY_ADDRESS / *_ROUTER_ADDRESS / *_WRAPPED_NATIVE_ADDRESS env
-// vars. Base, Monad and Robinhood Chain also have current Uniswap V2
-// deployments, while this adapter prefers their newer V3 route for trading.
+// vars. Base, Monad and Robinhood Chain have current Uniswap V2 deployments
+// below, while this adapter prefers their newer V3 route and only falls back
+// to V2 when V3 cannot produce a route.
 const UNISWAP_V2_MAINNET = {
   factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" as const,
   router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" as const,
