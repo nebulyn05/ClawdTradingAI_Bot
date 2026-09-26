@@ -39,10 +39,8 @@ interface EvmChainConfig {
 // Canonical mainnet deployments. Testnets have no default — most public
 // testnets don't have a single "official" V2 fork — so those fall back to
 // the *_FACTORY_ADDRESS / *_ROUTER_ADDRESS / *_WRAPPED_NATIVE_ADDRESS env
-// vars, which override the mainnet defaults too if set. Monad and Robinhood
-// Chain have no known public V2-fork deployment wired in at all yet —
-// Robinhood Chain in particular is built for tokenized stocks/RWAs, not
-// permissionless meme trading, and may not have one.
+// vars. Base, Monad and Robinhood Chain also have current Uniswap V2
+// deployments, while this adapter prefers their newer V3 route for trading.
 const UNISWAP_V2_MAINNET = {
   factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" as const,
   router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" as const,
@@ -213,7 +211,7 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
           network === "mainnet" ? cfg.ROBINHOOD_MAINNET_WS_URL : cfg.ROBINHOOD_TESTNET_WS_URL,
           rpcUrl,
         ),
-        // No known public AMM factory on Robinhood Chain — see module comment.
+        // V2 remains available as a configured fallback/legacy integration.
         factoryAddress: resolved(cfg.ROBINHOOD_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.ROBINHOOD_ROUTER_ADDRESS, undefined, network),
         wrappedNativeAddress: resolved(cfg.ROBINHOOD_WRAPPED_NATIVE_ADDRESS, UNISWAP_V3_MAINNET.robinhood?.wrappedNative, network),
