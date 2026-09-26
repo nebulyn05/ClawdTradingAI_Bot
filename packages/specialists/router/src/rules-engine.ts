@@ -109,16 +109,22 @@ async function mayExecute(
   action: RuleAction,
 ): Promise<boolean> {
   const executions = await getDb().ruleExecution.findMany({
-    where: { ruleId, userId, status: "opened" },
+    where: { ruleId, userId },
     orderBy: { triggeredAt: "desc" },
     take: 1,
-    select: { triggeredAt: true },
+    select: { status: true, triggeredAt: true },
   });
 
   const last = executions[0];
   if (!last) return true;
 
-  if (executionMode(action) === "once") return false;
+  if (last.status === "opened" && executionMode(action) === "once") return false;
+
+  // Do not hammer Postgres/RPC every tick when a user matches but cannot trade
+  // yet (for example, their wallet is still inactive or underfunded).
+  if (last.status !== "opened" && Date.now() - last.triggeredAt.getTime() < 60_000) {
+    return false;
+  }
 
   const cooldownMinutes = Math.max(1, action.cooldownMinutes ?? 1440);
   return Date.now() - last.triggeredAt.getTime() >= cooldownMinutes * 60_000;
