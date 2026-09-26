@@ -59,7 +59,7 @@ export default async function OverviewPage() {
   ]);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <main className="page-shell">
       <div>
         <h1 className="text-lg font-semibold">Overview</h1>
         <p className="text-sm text-white/60">
@@ -70,7 +70,7 @@ export default async function OverviewPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4">
         <div className="card">
           <div className="stat-value">{formatUsd(cumulativeBalances.totalUsd)}</div>
           <div className="stat-label">Total user balance (live, USD est.)</div>
@@ -117,12 +117,12 @@ export default async function OverviewPage() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card">
         <h2 className="mb-3 text-sm font-semibold text-white/80">User wallet balances by chain (live)</h2>
         {cumulativeBalances.byChain.length === 0 ? (
           <p className="text-sm text-white/50">No wallets yet.</p>
         ) : (
-          <table className="data-table">
+          <div className="table-scroll"><div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
                 <th>Chain</th>
