@@ -6,7 +6,7 @@ import {
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { loadConfig, networkForChain, type Quote, type TxResult } from "@clawd/core";
+import { networkForChain, type Quote, type TxResult } from "@clawd/core";
 import type { EvmChain } from "./config.js";
 import { evmConfig } from "./config.js";
 import { createEvmTransport } from "./transport.js";
