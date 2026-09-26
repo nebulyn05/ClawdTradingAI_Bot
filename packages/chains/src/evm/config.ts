@@ -161,9 +161,9 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
         factoryAddress: resolved(cfg.BASE_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.BASE_ROUTER_ADDRESS, undefined, network),
         wrappedNativeAddress: resolved(cfg.BASE_WRAPPED_NATIVE_ADDRESS, undefined, network),
-        v3FactoryAddress: resolved("", UNISWAP_V3_MAINNET.base?.factory, network),
-        v3QuoterAddress: resolved("", UNISWAP_V3_MAINNET.base?.quoter, network),
-        v3RouterAddress: resolved("", UNISWAP_V3_MAINNET.base?.router, network),
+        v3FactoryAddress: resolved(cfg.BASE_V3_FACTORY_ADDRESS, UNISWAP_V3_MAINNET.base?.factory, network),
+        v3QuoterAddress: resolved(cfg.BASE_V3_QUOTER_ADDRESS, UNISWAP_V3_MAINNET.base?.quoter, network),
+        v3RouterAddress: resolved(cfg.BASE_V3_ROUTER_ADDRESS, UNISWAP_V3_MAINNET.base?.router, network),
       };
     }
     case "monad": {
@@ -190,9 +190,9 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
         factoryAddress: resolved(cfg.MONAD_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.MONAD_ROUTER_ADDRESS, undefined, network),
         wrappedNativeAddress: resolved(cfg.MONAD_WRAPPED_NATIVE_ADDRESS, undefined, network),
-        v3FactoryAddress: resolved("", UNISWAP_V3_MAINNET.monad?.factory, network),
-        v3QuoterAddress: resolved("", UNISWAP_V3_MAINNET.monad?.quoter, network),
-        v3RouterAddress: resolved("", UNISWAP_V3_MAINNET.monad?.router, network),
+        v3FactoryAddress: resolved(cfg.MONAD_V3_FACTORY_ADDRESS, UNISWAP_V3_MAINNET.monad?.factory, network),
+        v3QuoterAddress: resolved(cfg.MONAD_V3_QUOTER_ADDRESS, UNISWAP_V3_MAINNET.monad?.quoter, network),
+        v3RouterAddress: resolved(cfg.MONAD_V3_ROUTER_ADDRESS, UNISWAP_V3_MAINNET.monad?.router, network),
       };
     }
     case "robinhood": {
@@ -216,10 +216,10 @@ function evmConfig(chain: EvmChain): EvmChainConfig {
         // No known public AMM factory on Robinhood Chain — see module comment.
         factoryAddress: resolved(cfg.ROBINHOOD_FACTORY_ADDRESS, undefined, network),
         routerAddress: resolved(cfg.ROBINHOOD_ROUTER_ADDRESS, undefined, network),
-        wrappedNativeAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.wrappedNative, network),
-        v3FactoryAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.factory, network),
-        v3QuoterAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.quoter, network),
-        v3RouterAddress: resolved("", UNISWAP_V3_MAINNET.robinhood?.router, network),
+        wrappedNativeAddress: resolved(cfg.ROBINHOOD_WRAPPED_NATIVE_ADDRESS, UNISWAP_V3_MAINNET.robinhood?.wrappedNative, network),
+        v3FactoryAddress: resolved(cfg.ROBINHOOD_V3_FACTORY_ADDRESS, UNISWAP_V3_MAINNET.robinhood?.factory, network),
+        v3QuoterAddress: resolved(cfg.ROBINHOOD_V3_QUOTER_ADDRESS, UNISWAP_V3_MAINNET.robinhood?.quoter, network),
+        v3RouterAddress: resolved(cfg.ROBINHOOD_V3_ROUTER_ADDRESS, UNISWAP_V3_MAINNET.robinhood?.router, network),
       };
     }
   }
