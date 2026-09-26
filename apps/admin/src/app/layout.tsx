@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Clawd Agents — Admin",
-  description: "Operator dashboard for Clawd Agents",
+  title: "Clawd Agents — Control Center",
+  description: "Secure administration and operations console for Clawd Agents",
+  viewport: { width: "device-width", initialScale: 1 },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
