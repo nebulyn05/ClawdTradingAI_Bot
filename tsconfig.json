@@ -1,38 +1,15 @@
 {
   "files": [],
   "references": [
-    {
-      "path": "packages/core"
-    },
-    {
-      "path": "packages/db"
-    },
-    {
-      "path": "packages/wallet"
-    },
-    {
-      "path": "packages/chains"
-    },
-    {
-      "path": "packages/pricing"
-    },
-    {
-      "path": "packages/ai"
-    },
-    {
-      "path": "packages/backtest"
-    },
-    {
-      "path": "packages/specialists/guard"
-    },
-    {
-      "path": "packages/specialists/router"
-    },
-    {
-      "path": "apps/bot"
-    },
-    {
-      "path": "apps/worker"
-    }
+    { "path": "packages/core" },
+    { "path": "packages/db" },
+    { "path": "packages/wallet" },
+    { "path": "packages/chains" },
+    { "path": "packages/pricing" },
+    { "path": "packages/ai" },
+    { "path": "packages/specialists/guard" },
+    { "path": "packages/specialists/router" },
+    { "path": "apps/bot" },
+    { "path": "apps/worker" }
   ]
 }
